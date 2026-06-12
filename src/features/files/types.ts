@@ -36,6 +36,7 @@ export type SpecialPaths = {
   downloads: string;
   pictures: string;
   aiLibrary: string;
+  novelAi?: string | null;
 };
 
 export type ScanResult = {

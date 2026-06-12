@@ -28,6 +28,7 @@ pub fn get_special_paths(app_data: &Path) -> Result<SpecialPaths, String> {
             downloads: home.clone(),
             pictures: home.clone(),
             ai_library: app_data.join("ai_library").to_string_lossy().to_string(),
+            novel_ai: None,
         })
     }
 }

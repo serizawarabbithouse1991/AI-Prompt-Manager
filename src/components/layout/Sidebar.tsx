@@ -39,6 +39,15 @@ export function Sidebar() {
               {item.label}
             </button>
           ))}
+        {isDesktop && specialPaths?.novelAi && (
+          <button
+            type="button"
+            onClick={() => void navigateTo(specialPaths.novelAi!)}
+            className="sidebar-btn"
+          >
+            NovelAI (iCloud)
+          </button>
+        )}
         {COMMON_ITEMS.map((item) => (
           <button
             key={item.id}

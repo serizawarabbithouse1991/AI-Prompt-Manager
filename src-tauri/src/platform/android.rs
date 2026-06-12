@@ -11,6 +11,7 @@ pub fn get_special_paths(app_data: &Path) -> Result<SpecialPaths, String> {
         downloads: ai_library.to_string_lossy().to_string(),
         pictures: ai_library.to_string_lossy().to_string(),
         ai_library: ai_library.to_string_lossy().to_string(),
+        novel_ai: None,
     })
 }
 

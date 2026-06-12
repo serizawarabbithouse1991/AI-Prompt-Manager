@@ -32,6 +32,7 @@ pub struct SpecialPaths {
     pub downloads: String,
     pub pictures: String,
     pub ai_library: String,
+    pub novel_ai: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
