@@ -21,35 +21,15 @@ pub async fn list_directory(app: AppHandle, path: String) -> Result<Vec<FileEntr
         return Err(format!("Not a directory: {path}"));
     }
 
+    // パフォーマンス重視: 一覧取得ではサムネイルを生成しない（既存のものだけ DB から付与）。
+    // 生成はスキャン時・ファイル選択時に行う。
     let mut entries = Vec::new();
     for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
-        let entry_path = entry.path();
-        let (width, height) = if entry_path.is_file() {
-            image::image_dimensions(&entry_path)
-                .map(|(w, h)| (Some(w as i64), Some(h as i64)))
-                .unwrap_or((None, None))
-        } else {
-            (None, None)
-        };
-        let mut file_entry =
-            files_repo::build_entry_from_metadata(&entry_path, width, height)?;
-        if file_entry.file_kind == "image" {
-            let app_data = app_data_dir(&app)?;
-            with_conn(&app, |conn| {
-                if let Ok(Some(thumb)) = thumbnailer::get_thumbnail_path(
-                    conn,
-                    &app_data,
-                    &file_entry.absolute_path,
-                    &file_entry.id,
-                    256,
-                ) {
-                    file_entry.thumbnail_path = Some(thumb);
-                }
-                Ok(())
-            })?;
+        match files_repo::build_entry_from_metadata(&entry.path(), None, None) {
+            Ok(file_entry) => entries.push(file_entry),
+            Err(_) => continue,
         }
-        entries.push(file_entry);
     }
 
     entries.sort_by(|a, b| {
@@ -57,6 +37,10 @@ pub async fn list_directory(app: AppHandle, path: String) -> Result<Vec<FileEntr
             .cmp(&a.is_directory)
             .then(a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()))
     });
+
+    with_conn(&app, |conn| {
+        files_repo::attach_thumbnail_paths(conn, &mut entries)
+    })?;
 
     Ok(entries)
 }

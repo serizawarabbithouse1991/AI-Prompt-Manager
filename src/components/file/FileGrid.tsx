@@ -57,6 +57,8 @@ export function FileGrid() {
                 <img
                   src={convertFileSrc(file.thumbnailPath ?? file.absolutePath)}
                   alt={file.displayName}
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover"
                 />
               ) : (
