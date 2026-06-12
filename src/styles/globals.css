@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@utility toolbar-btn {
+  @apply rounded border border-neutral-700 px-2 py-1 text-sm hover:bg-neutral-800 disabled:opacity-50;
+}
+
+@utility sidebar-btn {
+  @apply block w-full rounded px-3 py-2 text-left text-sm text-neutral-300 hover:bg-neutral-900 disabled:opacity-50;
+}
+
+@utility action-btn {
+  @apply rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800;
+}
+
+@utility action-btn-danger {
+  @apply rounded border border-red-900 px-2 py-1 text-xs text-red-400 hover:bg-red-950;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply bg-neutral-950 text-neutral-100 antialiased;
+}

@@ -1,0 +1,104 @@
+pub const MIGRATION_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS files (
+  id TEXT PRIMARY KEY,
+  parent_id TEXT,
+  absolute_path TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  extension TEXT,
+  mime_type TEXT,
+  file_kind TEXT NOT NULL,
+  size_bytes INTEGER DEFAULT 0,
+  width INTEGER,
+  height INTEGER,
+  created_at TEXT,
+  modified_at TEXT,
+  indexed_at TEXT,
+  content_hash TEXT,
+  perceptual_hash TEXT,
+  is_directory INTEGER DEFAULT 0,
+  is_hidden INTEGER DEFAULT 0,
+  is_favorite INTEGER DEFAULT 0,
+  is_deleted INTEGER DEFAULT 0,
+  local_only INTEGER DEFAULT 1,
+  remote_object_path TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ai_generation_metadata (
+  id TEXT PRIMARY KEY,
+  file_id TEXT NOT NULL,
+  source_app TEXT,
+  positive_prompt TEXT,
+  negative_prompt TEXT,
+  model TEXT,
+  sampler TEXT,
+  scheduler TEXT,
+  seed TEXT,
+  steps INTEGER,
+  cfg_scale REAL,
+  generation_width INTEGER,
+  generation_height INTEGER,
+  workflow_json TEXT,
+  raw_metadata_json TEXT,
+  created_at TEXT,
+  updated_at TEXT,
+  FOREIGN KEY(file_id) REFERENCES files(id)
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  color TEXT,
+  kind TEXT DEFAULT 'user',
+  created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS file_tags (
+  file_id TEXT NOT NULL,
+  tag_id TEXT NOT NULL,
+  PRIMARY KEY(file_id, tag_id),
+  FOREIGN KEY(file_id) REFERENCES files(id),
+  FOREIGN KEY(tag_id) REFERENCES tags(id)
+);
+
+CREATE TABLE IF NOT EXISTS collections (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  kind TEXT DEFAULT 'manual',
+  created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS collection_files (
+  collection_id TEXT NOT NULL,
+  file_id TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  PRIMARY KEY(collection_id, file_id),
+  FOREIGN KEY(collection_id) REFERENCES collections(id),
+  FOREIGN KEY(file_id) REFERENCES files(id)
+);
+
+CREATE TABLE IF NOT EXISTS indexed_folders (
+  id TEXT PRIMARY KEY,
+  platform TEXT NOT NULL,
+  path TEXT NOT NULL,
+  display_name TEXT,
+  bookmark_data TEXT,
+  recursive INTEGER DEFAULT 1,
+  created_at TEXT,
+  last_scanned_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS thumbnails (
+  id TEXT PRIMARY KEY,
+  file_id TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  local_path TEXT NOT NULL,
+  created_at TEXT,
+  FOREIGN KEY(file_id) REFERENCES files(id)
+);
+"#;
+
+pub fn run_migrations(conn: &rusqlite::Connection) -> Result<(), String> {
+    conn.execute_batch(MIGRATION_SQL)
+        .map_err(|e| e.to_string())
+}
