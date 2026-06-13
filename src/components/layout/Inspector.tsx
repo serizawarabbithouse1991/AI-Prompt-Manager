@@ -32,8 +32,10 @@ export function Inspector() {
 
   if (!selectedFile) {
     return (
-      <aside className="hidden h-full items-center justify-center border-l border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-500 lg:flex">
-        ファイルを選択してください
+      <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950">
+        <div className="flex flex-1 items-center justify-center p-4 text-sm text-neutral-500">
+          ファイルを選択してください
+        </div>
       </aside>
     );
   }
@@ -57,7 +59,7 @@ export function Inspector() {
   }
 
   const content = (
-    <div className="space-y-4 overflow-auto p-4">
+    <div className="space-y-4 p-4">
       <FilePreview file={selectedFile} />
       <div className="space-y-1">
         <h2 className="truncate text-sm font-medium">{selectedFile.displayName}</h2>
@@ -130,12 +132,14 @@ export function Inspector() {
 
   return (
     <>
-      <aside className="hidden h-full overflow-hidden border-l border-neutral-800 bg-neutral-950 lg:block">
-        {content}
+      <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {content}
+        </div>
       </aside>
       {inspectorOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950 lg:hidden">
-          <div className="flex items-center border-b border-neutral-800 p-3">
+          <div className="flex shrink-0 items-center border-b border-neutral-800 p-3">
             <button
               type="button"
               onClick={() => setInspectorOpen(false)}
@@ -144,7 +148,7 @@ export function Inspector() {
               ← 戻る
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">{content}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{content}</div>
         </div>
       )}
     </>

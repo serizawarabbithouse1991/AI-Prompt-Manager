@@ -14,7 +14,9 @@ export function AppShell() {
           <Breadcrumb />
           <FileGrid />
         </main>
-        <Inspector />
+        <div className="hidden min-h-0 h-full overflow-hidden lg:block">
+          <Inspector />
+        </div>
       </div>
       <BottomNav />
     </div>
