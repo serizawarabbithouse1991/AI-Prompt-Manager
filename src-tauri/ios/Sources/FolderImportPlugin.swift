@@ -11,19 +11,24 @@ private class FolderPickerDelegate: NSObject, UIDocumentPickerDelegate {
   }
 
   func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-    guard let url = urls.first else {
+    guard let source = urls.first else {
       invoke.resolve(["path": NSNull()])
       return
     }
 
-    let didAccess = url.startAccessingSecurityScopedResource()
+    let didAccess = source.startAccessingSecurityScopedResource()
     defer {
       if didAccess {
-        url.stopAccessingSecurityScopedResource()
+        source.stopAccessingSecurityScopedResource()
       }
     }
 
-    invoke.resolve(["path": url.path])
+    do {
+      let stagedPath = try FolderImportPlugin.stageFolderForImport(from: source)
+      invoke.resolve(["path": stagedPath])
+    } catch {
+      invoke.reject("Failed to stage folder: \(error.localizedDescription)")
+    }
   }
 
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
@@ -35,16 +40,50 @@ private class FolderPickerDelegate: NSObject, UIDocumentPickerDelegate {
 class FolderImportPlugin: Plugin {
   private var pickerDelegate: FolderPickerDelegate?
 
-  @objc public func pickFolder(_ invoke: Invoke) throws {
+  override init() {
+    super.init()
+  }
+
+  @objc public func pickFolder(_ invoke: Invoke) {
     DispatchQueue.main.async {
-      let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.folder], asCopy: true)
+      guard let presenter = self.manager.viewController else {
+        invoke.reject("View controller unavailable")
+        return
+      }
+
+      let picker = UIDocumentPickerViewController(
+        forOpeningContentTypes: [UTType.folder],
+        asCopy: false
+      )
       picker.allowsMultipleSelection = false
       let delegate = FolderPickerDelegate(invoke: invoke)
       self.pickerDelegate = delegate
       picker.delegate = delegate
-      picker.modalPresentationStyle = .formSheet
-      self.manager.viewController?.present(picker, animated: true)
+      picker.modalPresentationStyle = .fullScreen
+      presenter.present(picker, animated: true)
     }
+  }
+
+  static func stageFolderForImport(from source: URL) throws -> String {
+    let fileManager = FileManager.default
+    let stagingRoot = fileManager.temporaryDirectory.appendingPathComponent(
+      "folder-import-\(UUID().uuidString)",
+      isDirectory: true
+    )
+    try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+
+    var isDirectory: ObjCBool = false
+    guard fileManager.fileExists(atPath: source.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+      throw NSError(
+        domain: "FolderImportPlugin",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Selected item is not a folder"]
+      )
+    }
+
+    let destination = stagingRoot.appendingPathComponent(source.lastPathComponent, isDirectory: true)
+    try fileManager.copyItem(at: source, to: destination)
+    return destination.path
   }
 }
 
