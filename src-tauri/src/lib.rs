@@ -28,6 +28,7 @@ pub fn run() {
             commands::files::import_paths,
             plugins::folder_import::pick_import_folder,
             plugins::folder_import::pick_import_items,
+            plugins::folder_import::pick_import_photos,
             commands::files::rename_file,
             commands::files::trash_file,
             commands::files::reveal_in_file_manager,

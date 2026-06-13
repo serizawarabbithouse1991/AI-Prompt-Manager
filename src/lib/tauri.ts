@@ -31,6 +31,10 @@ export async function pickImportItems(): Promise<string[]> {
   return invoke<string[]>("pick_import_items");
 }
 
+export async function pickImportPhotos(): Promise<string[]> {
+  return invoke<string[]>("pick_import_photos");
+}
+
 export async function importFromSaf(uri: string): Promise<FileEntry> {
   return invoke<FileEntry>("import_from_saf", { uri });
 }

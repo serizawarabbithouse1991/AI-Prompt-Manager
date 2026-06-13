@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
-import { importPaths, pickImportItems } from "@/lib/tauri";
-import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
+import { importPaths, pickImportItems, pickImportPhotos } from "@/lib/tauri";
+import { isDesktopPlatform, isIOSPlatform, isMobilePlatform } from "@/lib/platform";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 
@@ -72,6 +72,12 @@ export function SettingsPanel() {
   }
 
   async function handleImportFromPhotoLibrary() {
+    if (isIOSPlatform(platformName)) {
+      const paths = await pickImportPhotos();
+      await runImport(paths, "写真ライブラリからインポート");
+      return;
+    }
+
     const selected = await open(PHOTO_LIBRARY_OPTIONS);
     await runImport(normalizeSelectedPaths(selected), "写真ライブラリからインポート");
   }
@@ -96,7 +102,7 @@ export function SettingsPanel() {
           <h2 className="text-sm font-medium">インポート</h2>
           <p className="text-xs text-neutral-500">
             {isMobile
-              ? "iCloud では画像ファイル・ZIP・画像フォルダをまとめて選べます。写真アプリのアルバムからも読み込めます。"
+              ? "iCloud では画像ファイル・ZIP・画像フォルダをまとめて選べます。写真ライブラリはオリジナルファイルを保持してインポートします（AIメタデータ付き画像向け）。"
               : "ファイルピッカーで iCloud Drive 内の画像・ZIP、またはフォルダを選べます。"}
           </p>
           <div className="flex flex-col gap-2">

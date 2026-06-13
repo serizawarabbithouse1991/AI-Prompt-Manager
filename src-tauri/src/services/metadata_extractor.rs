@@ -47,7 +47,7 @@ pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGeneratio
         updated_at: Some(now_iso()),
     };
 
-    if let Some(comment) = raw_chunks.get("Comment").or_else(|| raw_chunks.get("comment")) {
+    if let Some(comment) = chunk_get(&raw_chunks, "Comment") {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(comment) {
             meta.source_app = Some("NovelAI".to_string());
             meta.positive_prompt = json
@@ -76,9 +76,8 @@ pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGeneratio
         }
     }
 
-    if let Some(params) = raw_chunks
-        .get("parameters")
-        .or_else(|| raw_chunks.get("Parameters"))
+    if let Some(params) = chunk_get(&raw_chunks, "parameters")
+        .or_else(|| chunk_get(&raw_chunks, "Parameters"))
     {
         parse_a1111_parameters(&mut meta, params);
         if params.contains("Version: f2.") || params.contains("NovelAI") {
@@ -89,7 +88,29 @@ pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGeneratio
         return Ok(Some(meta));
     }
 
-    if let Some(workflow) = raw_chunks.get("workflow").or_else(|| raw_chunks.get("prompt")) {
+    if let Some(description) = chunk_get(&raw_chunks, "Description") {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(description) {
+            meta.source_app = Some("NovelAI".to_string());
+            meta.positive_prompt = json
+                .get("prompt")
+                .or_else(|| json.get("Description"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            meta.negative_prompt = json
+                .get("uc")
+                .or_else(|| json.get("negative_prompt"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            return Ok(Some(meta));
+        }
+        if description.contains("Negative prompt:") || description.contains("Steps:") {
+            parse_a1111_parameters(&mut meta, description);
+            meta.source_app = Some("Stable Diffusion WebUI".to_string());
+            return Ok(Some(meta));
+        }
+    }
+
+    if let Some(workflow) = chunk_get(&raw_chunks, "workflow").or_else(|| chunk_get(&raw_chunks, "prompt")) {
         meta.source_app = Some("ComfyUI".to_string());
         meta.workflow_json = Some(workflow.clone());
         meta.positive_prompt = Some(truncate_prompt(workflow));
@@ -192,6 +213,15 @@ fn read_png_text_chunks(path: &str) -> Result<HashMap<String, String>, String> {
     Ok(map)
 }
 
+fn chunk_get<'a>(map: &'a HashMap<String, String>, key: &str) -> Option<&'a String> {
+    if let Some(value) = map.get(key) {
+        return Some(value);
+    }
+    map.iter()
+        .find(|(candidate, _)| candidate.eq_ignore_ascii_case(key))
+        .map(|(_, value)| value)
+}
+
 fn read_exif_metadata(path: &str) -> Result<HashMap<String, String>, String> {
     let file = File::open(path).map_err(|e| e.to_string())?;
     let mut bufreader = BufReader::new(file);
@@ -200,12 +230,18 @@ fn read_exif_metadata(path: &str) -> Result<HashMap<String, String>, String> {
         .map_err(|e| e.to_string())?;
     let mut map = HashMap::new();
     if let Some(field) = exif.get_field(exif::Tag::ImageDescription, exif::In::PRIMARY) {
-        map.insert("ImageDescription".to_string(), field.display_value().to_string());
+        let value = field.display_value().to_string();
+        map.insert("ImageDescription".to_string(), value.clone());
+        if value.contains("Negative prompt:") || value.contains("Steps:") {
+            map.insert("parameters".to_string(), value);
+        }
     }
     if let Some(field) = exif.get_field(exif::Tag::UserComment, exif::In::PRIMARY) {
         let value = field.display_value().to_string();
         map.insert("UserComment".to_string(), value.clone());
-        map.insert("parameters".to_string(), value);
+        if !map.contains_key("parameters") {
+            map.insert("parameters".to_string(), value);
+        }
     }
     Ok(map)
 }

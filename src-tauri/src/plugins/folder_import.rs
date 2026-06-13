@@ -78,3 +78,27 @@ pub async fn pick_import_items<R: Runtime>(app: AppHandle<R>) -> Result<Vec<Stri
         Err("Import picker is only supported on iOS".to_string())
     }
 }
+
+#[tauri::command]
+pub async fn pick_import_photos<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let plugin = app.state::<FolderImportPlugin<R>>();
+        let response: PickItemsResponse = plugin
+            .0
+            .run_mobile_plugin("pickPhotos", ())
+            .map_err(|e| e.to_string())?;
+        Ok(response
+            .paths
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|path| !path.is_empty())
+            .collect())
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Err("Photo import picker is only supported on iOS".to_string())
+    }
+}
