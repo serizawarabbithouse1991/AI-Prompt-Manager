@@ -4,11 +4,9 @@ use std::io::BufReader;
 use std::path::Path;
 
 use regex::Regex;
-use uuid::Uuid;
-
 use crate::db::connection::now_iso;
 use crate::models::metadata::AIGenerationMetadata;
-use crate::services::hash::path_to_id;
+use crate::services::hash::{metadata_id_for_file, path_to_id};
 
 pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGenerationMetadata>, String> {
     let path_obj = Path::new(path);
@@ -30,7 +28,7 @@ pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGeneratio
 
     let raw_json = serde_json::to_string(&raw_chunks).map_err(|e| e.to_string())?;
     let mut meta = AIGenerationMetadata {
-        id: Uuid::new_v4().to_string(),
+        id: metadata_id_for_file(file_id),
         file_id: file_id.to_string(),
         source_app: None,
         positive_prompt: None,

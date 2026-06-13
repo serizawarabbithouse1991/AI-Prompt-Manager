@@ -7,7 +7,11 @@ use crate::services::metadata_extractor;
 
 #[tauri::command]
 pub async fn extract_metadata(app: AppHandle, path: String) -> Result<Option<AIGenerationMetadata>, String> {
-    let file_id = crate::services::hash::path_to_id(&path);
+    let file_id = with_conn(&app, |conn| {
+        Ok(files_repo::file_from_path(conn, &path)?
+            .map(|entry| entry.id)
+            .unwrap_or_else(|| crate::services::hash::path_to_id(&path)))
+    })?;
     let meta = metadata_extractor::extract_from_file(&path, &file_id)?;
     if let Some(ref m) = meta {
         with_conn(&app, |conn| {

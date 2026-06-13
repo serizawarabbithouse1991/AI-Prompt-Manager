@@ -98,7 +98,14 @@ CREATE TABLE IF NOT EXISTS thumbnails (
 );
 "#;
 
+const POST_MIGRATION_SQL: &str = r#"
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_metadata_file_id ON ai_generation_metadata(file_id);
+"#;
+
 pub fn run_migrations(conn: &rusqlite::Connection) -> Result<(), String> {
     conn.execute_batch(MIGRATION_SQL)
+        .map_err(|e| e.to_string())?;
+    crate::db::repositories::metadata::dedupe_by_file_id(conn)?;
+    conn.execute_batch(POST_MIGRATION_SQL)
         .map_err(|e| e.to_string())
 }

@@ -88,7 +88,9 @@ export const useFileStore = create<FileStore>((set, get) => ({
         f.id === fileId ? { ...f, thumbnailPath } : f,
       );
       const selectedFile =
-        state.selectedFileId === fileId ? findFile(files, fileId) : state.selectedFile;
+        state.selectedFileId === fileId && state.selectedFile
+          ? { ...state.selectedFile, thumbnailPath }
+          : state.selectedFile;
       return { files, selectedFile };
     });
   },
@@ -184,16 +186,35 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   setViewMode: async (mode) => {
+    const { selectedFileId, metadata, tags, inspectorOpen } = get();
     set({ viewMode: mode, loading: true, error: null });
     try {
       if (mode === "favorites") {
         const files = await listFavorites();
-        set({ files, loading: false, selectedFileId: null, selectedFile: null });
+        const selectedFile = findFile(files, selectedFileId);
+        set({
+          files,
+          loading: false,
+          selectedFileId: selectedFile ? selectedFileId : null,
+          selectedFile,
+          metadata: selectedFile ? metadata : null,
+          tags: selectedFile ? tags : [],
+          inspectorOpen: selectedFile ? inspectorOpen : false,
+        });
         return;
       }
       if (mode === "ai-library") {
         const files = await listAiLibrary();
-        set({ files, loading: false, selectedFileId: null, selectedFile: null });
+        const selectedFile = findFile(files, selectedFileId);
+        set({
+          files,
+          loading: false,
+          selectedFileId: selectedFile ? selectedFileId : null,
+          selectedFile,
+          metadata: selectedFile ? metadata : null,
+          tags: selectedFile ? tags : [],
+          inspectorOpen: selectedFile ? inspectorOpen : false,
+        });
         return;
       }
       if (mode === "settings") {
@@ -229,13 +250,32 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   refresh: async () => {
-    const { viewMode, searchQuery, currentPath } = get();
+    const { viewMode, searchQuery, currentPath, selectedFileId, metadata, tags, inspectorOpen } =
+      get();
     if (viewMode === "search" && searchQuery) {
       await get().runSearch(searchQuery);
     } else if (viewMode === "favorites") {
-      await get().setViewMode("favorites");
+      const files = await listFavorites();
+      const selectedFile = findFile(files, selectedFileId);
+      set({
+        files,
+        selectedFileId: selectedFile ? selectedFileId : null,
+        selectedFile,
+        metadata: selectedFile ? metadata : null,
+        tags: selectedFile ? tags : [],
+        inspectorOpen: selectedFile ? inspectorOpen : false,
+      });
     } else if (viewMode === "ai-library") {
-      await get().setViewMode("ai-library");
+      const files = await listAiLibrary();
+      const selectedFile = findFile(files, selectedFileId);
+      set({
+        files,
+        selectedFileId: selectedFile ? selectedFileId : null,
+        selectedFile,
+        metadata: selectedFile ? metadata : null,
+        tags: selectedFile ? tags : [],
+        inspectorOpen: selectedFile ? inspectorOpen : false,
+      });
     } else if (viewMode === "settings") {
       await get().setViewMode("settings");
     } else if (currentPath) {

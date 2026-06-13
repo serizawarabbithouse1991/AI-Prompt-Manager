@@ -3,9 +3,14 @@ use std::path::Path;
 use uuid::{uuid, Uuid};
 
 const FILE_NAMESPACE: Uuid = uuid!("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+const METADATA_NAMESPACE: Uuid = uuid!("7c9e6679-7425-40de-944b-e07fc1f90ae7");
 
 pub fn path_to_id(path: &str) -> String {
     Uuid::new_v5(&FILE_NAMESPACE, path.as_bytes()).to_string()
+}
+
+pub fn metadata_id_for_file(file_id: &str) -> String {
+    Uuid::new_v5(&METADATA_NAMESPACE, file_id.as_bytes()).to_string()
 }
 
 pub fn file_content_hash(path: &Path) -> Result<String, String> {

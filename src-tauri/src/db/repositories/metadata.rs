@@ -27,27 +27,18 @@ fn row_to_metadata(row: &Row) -> Result<AIGenerationMetadata, rusqlite::Error> {
 
 pub fn upsert_metadata(conn: &Connection, meta: &AIGenerationMetadata) -> Result<(), String> {
     conn.execute(
+        "DELETE FROM ai_generation_metadata WHERE file_id = ?1",
+        params![meta.file_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
         r#"
         INSERT INTO ai_generation_metadata (
           id, file_id, source_app, positive_prompt, negative_prompt, model, sampler, scheduler,
           seed, steps, cfg_scale, generation_width, generation_height, workflow_json,
           raw_metadata_json, created_at, updated_at
         ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
-        ON CONFLICT(id) DO UPDATE SET
-          source_app=excluded.source_app,
-          positive_prompt=excluded.positive_prompt,
-          negative_prompt=excluded.negative_prompt,
-          model=excluded.model,
-          sampler=excluded.sampler,
-          scheduler=excluded.scheduler,
-          seed=excluded.seed,
-          steps=excluded.steps,
-          cfg_scale=excluded.cfg_scale,
-          generation_width=excluded.generation_width,
-          generation_height=excluded.generation_height,
-          workflow_json=excluded.workflow_json,
-          raw_metadata_json=excluded.raw_metadata_json,
-          updated_at=excluded.updated_at
         "#,
         params![
             meta.id,
@@ -75,7 +66,9 @@ pub fn upsert_metadata(conn: &Connection, meta: &AIGenerationMetadata) -> Result
 
 pub fn get_by_file_id(conn: &Connection, file_id: &str) -> Result<Option<AIGenerationMetadata>, String> {
     let mut stmt = conn
-        .prepare("SELECT * FROM ai_generation_metadata WHERE file_id = ?1 LIMIT 1")
+        .prepare(
+            "SELECT * FROM ai_generation_metadata WHERE file_id = ?1 ORDER BY updated_at DESC, rowid DESC LIMIT 1",
+        )
         .map_err(|e| e.to_string())?;
     let mut rows = stmt.query(params![file_id]).map_err(|e| e.to_string())?;
     if let Some(row) = rows.next().map_err(|e| e.to_string())? {
@@ -104,4 +97,18 @@ pub fn update_metadata(
     }
     meta.updated_at = Some(now_iso());
     upsert_metadata(conn, &meta)
+}
+
+pub fn dedupe_by_file_id(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        r#"
+        DELETE FROM ai_generation_metadata
+        WHERE rowid NOT IN (
+          SELECT MAX(rowid) FROM ai_generation_metadata GROUP BY file_id
+        )
+        "#,
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
