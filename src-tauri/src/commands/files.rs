@@ -267,3 +267,17 @@ pub async fn batch_remove_from_library(
         Ok(())
     })
 }
+
+#[tauri::command]
+pub async fn share_file(app: AppHandle, path: String) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        return crate::plugins::folder_import::share_file_ios(app, path).await;
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        crate::platform::share_file(&path)
+    }
+}

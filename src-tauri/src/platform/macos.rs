@@ -40,3 +40,15 @@ pub fn reveal_in_file_manager(path: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub fn share_file(path: &str) -> Result<(), String> {
+    let file = Path::new(path);
+    if !file.is_file() {
+        return Err(format!("Not a file: {path}"));
+    }
+    std::process::Command::new("open")
+        .arg(path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}

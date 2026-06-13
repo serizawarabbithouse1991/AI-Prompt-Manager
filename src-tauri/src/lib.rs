@@ -39,6 +39,7 @@ pub fn run() {
             commands::files::batch_add_tag,
             commands::files::batch_trash,
             commands::files::batch_remove_from_library,
+            commands::files::share_file,
             commands::metadata::extract_metadata,
             commands::metadata::get_metadata,
             commands::metadata::update_metadata,

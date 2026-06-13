@@ -23,6 +23,7 @@ export function Sidebar() {
   const viewMode = useFileStore((s) => s.viewMode);
   const platformName = useFileStore((s) => s.platformName);
   const bookmarks = useFileStore((s) => s.bookmarks);
+  const recentFolders = useFileStore((s) => s.recentFolders);
   const addBookmark = useFileStore((s) => s.addBookmark);
   const removeBookmark = useFileStore((s) => s.removeBookmark);
   const [bookmarkLabel, setBookmarkLabel] = useState("");
@@ -69,6 +70,23 @@ export function Sidebar() {
           </button>
         ))}
       </nav>
+
+      {isDesktop && recentFolders.length > 0 && (
+        <div className="mt-4 space-y-1 border-t border-neutral-800 pt-3">
+          <h3 className="px-3 text-xs font-medium text-neutral-500">最近のフォルダ</h3>
+          {recentFolders.map((folder) => (
+            <button
+              key={folder.path}
+              type="button"
+              onClick={() => void navigateTo(folder.path)}
+              className="sidebar-btn truncate"
+              title={folder.path}
+            >
+              {folder.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {isDesktop && currentPath && viewMode === "browse" && (
         <div className="mt-4 space-y-2 border-t border-neutral-800 pt-3">

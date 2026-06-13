@@ -57,8 +57,23 @@ function useFileSelection() {
     return selectionMode ? selectedFileIds.includes(fileId) : selectedFileId === fileId;
   }
 
-  function handleClick(fileId: string, e: React.MouseEvent) {
-    selectFile(fileId, e.metaKey || e.ctrlKey || selectionMode);
+  function handleClick(file: FileEntry, fileId: string, e: React.MouseEvent) {
+    if (e.metaKey || e.ctrlKey || selectionMode) {
+      selectFile(fileId, true);
+      return;
+    }
+    if (isMobile) {
+      if (file.isDirectory) {
+        void navigateTo(file.absolutePath);
+        return;
+      }
+      if (file.fileKind === "image") {
+        selectFile(fileId);
+        setLightboxFileId(fileId);
+        return;
+      }
+    }
+    selectFile(fileId);
   }
 
   function handleOpen(file: FileEntry) {
@@ -167,7 +182,7 @@ export function FileGrid() {
             file={file}
             selected={isSelected(file.id)}
             isMobile={isMobile}
-            onClick={(e) => handleClick(file.id, e)}
+            onClick={(e) => handleClick(file, file.id, e)}
             onDoubleClick={() => handleOpen(file)}
             onContextMenu={(e) => handleContextMenu(e, file.id)}
             onLongPress={() => enterSelectionMode(file.id)}
@@ -212,7 +227,7 @@ export function FileList() {
           file={file}
           selected={isSelected(file.id)}
           isMobile={isMobile}
-          onClick={(e) => handleClick(file.id, e)}
+          onClick={(e) => handleClick(file, file.id, e)}
           onDoubleClick={() => handleOpen(file)}
           onContextMenu={(e) => handleContextMenu(e, file.id)}
           onLongPress={() => enterSelectionMode(file.id)}

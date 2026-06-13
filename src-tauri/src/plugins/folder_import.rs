@@ -102,3 +102,13 @@ pub async fn pick_import_photos<R: Runtime>(app: AppHandle<R>) -> Result<Vec<Str
         Err("Photo import picker is only supported on iOS".to_string())
     }
 }
+
+#[cfg(target_os = "ios")]
+pub async fn share_file_ios<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
+    use tauri::Manager;
+    let plugin = app.state::<FolderImportPlugin<R>>();
+    plugin
+        .0
+        .run_mobile_plugin("shareFile", serde_json::json!({ "path": path }))
+        .map_err(|e| e.to_string())
+}

@@ -59,9 +59,16 @@ export type SortField = "name" | "modified" | "size" | "kind";
 export type SortOrder = "asc" | "desc";
 export type FileFilter = "all" | "images" | "favorites" | "tag";
 export type LayoutMode = "grid" | "list";
+export type SearchScope = "global" | "folder";
 
 export type Bookmark = {
   id: string;
   label: string;
   path: string;
+};
+
+export type RecentFolder = {
+  path: string;
+  label: string;
+  visitedAt: string;
 };

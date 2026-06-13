@@ -12,7 +12,10 @@ import {
   revealInFileManager,
   setFavorite,
   trashFile,
+  copyFile,
 } from "@/lib/tauri";
+import { shareFileEntry } from "@/lib/shareFile";
+import { open } from "@tauri-apps/plugin-dialog";
 import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
 
 export function Inspector() {
@@ -133,10 +136,28 @@ export function Inspector() {
             >
               ゴミ箱
             </button>
+            <button
+              type="button"
+              onClick={() =>
+                void open({ directory: true, multiple: false }).then((dest) => {
+                  if (typeof dest === "string") void copyFile(selectedFile.absolutePath, dest);
+                })
+              }
+              className="action-btn"
+            >
+              エクスポート
+            </button>
           </>
         )}
         {isMobile && !selectedFile.isDirectory && (
           <>
+            <button
+              type="button"
+              onClick={() => void shareFileEntry(selectedFile)}
+              className="action-btn"
+            >
+              共有
+            </button>
             <button
               type="button"
               onClick={() => {

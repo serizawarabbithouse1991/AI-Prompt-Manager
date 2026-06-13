@@ -157,3 +157,7 @@ export async function batchTrash(paths: string[]): Promise<void> {
 export async function batchRemoveFromLibrary(fileIds: string[]): Promise<void> {
   return invoke("batch_remove_from_library", { fileIds });
 }
+
+export async function shareFileNative(path: string): Promise<void> {
+  return invoke("share_file", { path });
+}

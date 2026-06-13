@@ -74,6 +74,23 @@ pub fn reveal_in_file_manager(path: &str) -> Result<(), String> {
     }
 }
 
+pub fn share_file(path: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        return macos::share_file(path);
+    }
+    #[cfg(target_os = "ios")]
+    {
+        let _ = path;
+        return Err("Use share_file command with iOS plugin".to_string());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    {
+        let _ = path;
+        Err("Native share is handled by Web Share API on this platform".to_string())
+    }
+}
+
 pub fn trash_file(path: &str) -> Result<(), String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {

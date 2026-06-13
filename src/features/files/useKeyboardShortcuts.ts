@@ -1,16 +1,22 @@
 import { useEffect } from "react";
 import { useFileStore } from "@/features/files/store";
+import { removeFromLibrary, trashFile } from "@/lib/tauri";
+import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
 
 export function useKeyboardShortcuts() {
   const goBack = useFileStore((s) => s.goBack);
   const goForward = useFileStore((s) => s.goForward);
   const refresh = useFileStore((s) => s.refresh);
   const selectedFile = useFileStore((s) => s.selectedFile);
+  const selectedFileIds = useFileStore((s) => s.selectedFileIds);
+  const selectionMode = useFileStore((s) => s.selectionMode);
   const setLightboxFileId = useFileStore((s) => s.setLightboxFileId);
   const lightboxFileId = useFileStore((s) => s.lightboxFileId);
   const clearSelection = useFileStore((s) => s.clearSelection);
-  const selectionMode = useFileStore((s) => s.selectionMode);
+  const selectFile = useFileStore((s) => s.selectFile);
   const viewMode = useFileStore((s) => s.viewMode);
+  const platformName = useFileStore((s) => s.platformName);
+  const files = useFileStore((s) => s.files);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -54,6 +60,37 @@ export function useKeyboardShortcuts() {
         if (selectedFile.fileKind === "image") {
           setLightboxFileId(selectedFile.id);
         }
+        return;
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const isDesktop = isDesktopPlatform(platformName);
+        const isMobile = isMobilePlatform(platformName);
+        const targets =
+          selectionMode && selectedFileIds.length > 0
+            ? files.filter((f) => selectedFileIds.includes(f.id))
+            : selectedFile
+              ? [selectedFile]
+              : [];
+
+        if (targets.length === 0 || targets.some((f) => f.isDirectory)) return;
+        if (!confirm(`${targets.length} 件を削除しますか？`)) return;
+
+        e.preventDefault();
+        void (async () => {
+          if (isDesktop) {
+            for (const file of targets) {
+              await trashFile(file.absolutePath);
+            }
+          } else if (isMobile) {
+            for (const file of targets) {
+              await removeFromLibrary(file.id);
+            }
+          }
+          selectFile(null);
+          clearSelection();
+          await refresh();
+        })();
       }
     }
 
@@ -64,10 +101,14 @@ export function useKeyboardShortcuts() {
     goForward,
     refresh,
     selectedFile,
+    selectedFileIds,
+    selectionMode,
+    files,
     setLightboxFileId,
     lightboxFileId,
     clearSelection,
-    selectionMode,
+    selectFile,
     viewMode,
+    platformName,
   ]);
 }

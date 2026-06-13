@@ -4,6 +4,8 @@ import type {
   FileEntry,
   FileFilter,
   LayoutMode,
+  RecentFolder,
+  SearchScope,
   SortField,
   SortOrder,
   SpecialPaths,
@@ -11,7 +13,7 @@ import type {
 } from "@/features/files/types";
 import type { AIGenerationMetadata } from "@/features/metadata/types";
 import type { Tag } from "@/features/tags/types";
-import { getDisplayFiles } from "@/features/files/viewUtils";
+import { filterFilesByQuery, getDisplayFiles } from "@/features/files/viewUtils";
 import {
   getSpecialPaths,
   listAiLibrary,
@@ -23,6 +25,55 @@ import {
 import { getPlatform, isMobilePlatform } from "@/lib/platform";
 
 const BOOKMARKS_KEY = "ai-fm-bookmarks";
+const RECENT_FOLDERS_KEY = "ai-fm-recent-folders";
+const VIEW_PREFS_KEY = "ai-fm-view-prefs";
+
+type ViewPrefs = {
+  sortField: SortField;
+  sortOrder: SortOrder;
+  fileFilter: FileFilter;
+  filterTagId: string | null;
+  layoutMode: LayoutMode;
+  searchScope: SearchScope;
+};
+
+function loadViewPrefs(): Partial<ViewPrefs> {
+  try {
+    const raw = sessionStorage.getItem(VIEW_PREFS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Partial<ViewPrefs>;
+  } catch {
+    return {};
+  }
+}
+
+function saveViewPrefs(prefs: ViewPrefs) {
+  sessionStorage.setItem(VIEW_PREFS_KEY, JSON.stringify(prefs));
+}
+
+function loadRecentFolders(): RecentFolder[] {
+  try {
+    const raw = localStorage.getItem(RECENT_FOLDERS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as RecentFolder[];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentFolders(folders: RecentFolder[]) {
+  localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders));
+}
+
+function pushRecentFolder(path: string, existing: RecentFolder[]): RecentFolder[] {
+  const label = path.split(/[/\\]/).filter(Boolean).pop() ?? path;
+  const next = [
+    { path, label, visitedAt: new Date().toISOString() },
+    ...existing.filter((f) => f.path !== path),
+  ].slice(0, 8);
+  saveRecentFolders(next);
+  return next;
+}
 
 function loadBookmarks(): Bookmark[] {
   try {
@@ -66,7 +117,9 @@ type FileStore = {
   filterTagId: string | null;
   layoutMode: LayoutMode;
   lightboxFileId: string | null;
+  searchScope: SearchScope;
   bookmarks: Bookmark[];
+  recentFolders: RecentFolder[];
   setPlatformName: (name: string) => void;
   setInspectorOpen: (open: boolean) => void;
   setSortField: (field: SortField) => void;
@@ -74,6 +127,7 @@ type FileStore = {
   setFileFilter: (filter: FileFilter) => void;
   setFilterTagId: (tagId: string | null) => void;
   setLayoutMode: (mode: LayoutMode) => void;
+  setSearchScope: (scope: SearchScope) => void;
   setLightboxFileId: (fileId: string | null) => void;
   getDisplayFiles: () => FileEntry[];
   initialize: () => Promise<void>;
@@ -108,6 +162,8 @@ function findFile(files: FileEntry[], id: string | null): FileEntry | null {
   return files.find((f) => f.id === id) ?? null;
 }
 
+const initialViewPrefs = loadViewPrefs();
+
 export const useFileStore = create<FileStore>((set, get) => ({
   specialPaths: null,
   currentPath: "",
@@ -130,20 +186,89 @@ export const useFileStore = create<FileStore>((set, get) => ({
   allTags: [],
   inspectorOpen: false,
   platformName: "unknown",
-  sortField: "name",
-  sortOrder: "asc",
-  fileFilter: "all",
-  filterTagId: null,
-  layoutMode: "grid",
+  sortField: initialViewPrefs.sortField ?? "name",
+  sortOrder: initialViewPrefs.sortOrder ?? "asc",
+  fileFilter: initialViewPrefs.fileFilter ?? "all",
+  filterTagId: initialViewPrefs.filterTagId ?? null,
+  layoutMode: initialViewPrefs.layoutMode ?? "grid",
+  searchScope: initialViewPrefs.searchScope ?? "global",
   lightboxFileId: null,
   bookmarks: loadBookmarks(),
+  recentFolders: loadRecentFolders(),
   setPlatformName: (name) => set({ platformName: name }),
   setInspectorOpen: (open) => set({ inspectorOpen: open }),
-  setSortField: (field) => set({ sortField: field }),
-  setSortOrder: (order) => set({ sortOrder: order }),
-  setFileFilter: (filter) => set({ fileFilter: filter }),
-  setFilterTagId: (tagId) => set({ filterTagId: tagId }),
-  setLayoutMode: (mode) => set({ layoutMode: mode }),
+  setSortField: (field) => {
+    set({ sortField: field });
+    const s = get();
+    saveViewPrefs({
+      sortField: field,
+      sortOrder: s.sortOrder,
+      fileFilter: s.fileFilter,
+      filterTagId: s.filterTagId,
+      layoutMode: s.layoutMode,
+      searchScope: s.searchScope,
+    });
+  },
+  setSortOrder: (order) => {
+    set({ sortOrder: order });
+    const s = get();
+    saveViewPrefs({
+      sortField: s.sortField,
+      sortOrder: order,
+      fileFilter: s.fileFilter,
+      filterTagId: s.filterTagId,
+      layoutMode: s.layoutMode,
+      searchScope: s.searchScope,
+    });
+  },
+  setFileFilter: (filter) => {
+    set({ fileFilter: filter });
+    const s = get();
+    saveViewPrefs({
+      sortField: s.sortField,
+      sortOrder: s.sortOrder,
+      fileFilter: filter,
+      filterTagId: s.filterTagId,
+      layoutMode: s.layoutMode,
+      searchScope: s.searchScope,
+    });
+  },
+  setFilterTagId: (tagId) => {
+    set({ filterTagId: tagId });
+    const s = get();
+    saveViewPrefs({
+      sortField: s.sortField,
+      sortOrder: s.sortOrder,
+      fileFilter: s.fileFilter,
+      filterTagId: tagId,
+      layoutMode: s.layoutMode,
+      searchScope: s.searchScope,
+    });
+  },
+  setLayoutMode: (mode) => {
+    set({ layoutMode: mode });
+    const s = get();
+    saveViewPrefs({
+      sortField: s.sortField,
+      sortOrder: s.sortOrder,
+      fileFilter: s.fileFilter,
+      filterTagId: s.filterTagId,
+      layoutMode: mode,
+      searchScope: s.searchScope,
+    });
+  },
+  setSearchScope: (scope) => {
+    set({ searchScope: scope });
+    const s = get();
+    saveViewPrefs({
+      sortField: s.sortField,
+      sortOrder: s.sortOrder,
+      fileFilter: s.fileFilter,
+      filterTagId: s.filterTagId,
+      layoutMode: s.layoutMode,
+      searchScope: scope,
+    });
+  },
   setLightboxFileId: (fileId) => set({ lightboxFileId: fileId }),
   setScanProgress: (message) => set({ scanProgress: message }),
   setBatchProgress: (message) => set({ batchProgress: message }),
@@ -243,7 +368,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   navigateTo: async (path: string) => {
-    const { history, historyIndex } = get();
+    const { history, historyIndex, recentFolders } = get();
     const nextHistory = history.slice(0, historyIndex + 1);
     nextHistory.push(path);
     set({
@@ -253,6 +378,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
       searchQuery: "",
       selectedFileIds: [],
       selectionMode: false,
+      recentFolders: pushRecentFolder(path, recentFolders),
     });
     await get().loadDirectory(path);
   },
@@ -399,11 +525,38 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   runSearch: async (query: string) => {
-    set({ loading: true, error: null, searchQuery: query, viewMode: "search", selectedFileIds: [], selectionMode: false });
+    const { searchScope, viewMode, currentPath, files } = get();
+    set({
+      loading: true,
+      error: null,
+      searchQuery: query,
+      viewMode: "search",
+      selectedFileIds: [],
+      selectionMode: false,
+    });
     try {
-      const files = await searchFiles(query);
+      if (searchScope === "folder") {
+        let baseFiles = files;
+        if (viewMode === "browse" && currentPath) {
+          baseFiles = await listDirectory(currentPath);
+        } else if (viewMode === "ai-library") {
+          baseFiles = await listAiLibrary();
+        } else if (viewMode === "favorites") {
+          baseFiles = await listFavorites();
+        }
+        const filtered = filterFilesByQuery(baseFiles, query);
+        set({
+          files: filtered,
+          loading: false,
+          selectedFileId: null,
+          selectedFile: null,
+        });
+        return;
+      }
+
+      const results = await searchFiles(query);
       set({
-        files,
+        files: results,
         loading: false,
         selectedFileId: null,
         selectedFile: null,

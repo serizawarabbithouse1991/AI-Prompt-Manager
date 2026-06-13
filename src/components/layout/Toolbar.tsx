@@ -18,6 +18,8 @@ export function Toolbar() {
   const setViewMode = useFileStore((s) => s.setViewMode);
   const platformName = useFileStore((s) => s.platformName);
   const viewMode = useFileStore((s) => s.viewMode);
+  const searchScope = useFileStore((s) => s.searchScope);
+  const setSearchScope = useFileStore((s) => s.setSearchScope);
 
   useEffect(() => {
     const input = document.getElementById("search-input") as HTMLInputElement | null;
@@ -90,6 +92,14 @@ export function Toolbar() {
           }
         }}
       />
+      <label className="hidden items-center gap-1 text-xs text-neutral-500 md:flex">
+        <input
+          type="checkbox"
+          checked={searchScope === "folder"}
+          onChange={(e) => setSearchScope(e.target.checked ? "folder" : "global")}
+        />
+        フォルダ内
+      </label>
       {isDesktop && (
         <button
           type="button"

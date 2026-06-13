@@ -10,6 +10,7 @@ import {
 } from "@/lib/tauri";
 import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
 import { open } from "@tauri-apps/plugin-dialog";
+import { shareFileEntry } from "@/lib/shareFile";
 
 export function FileContextMenu() {
   const [menu, setMenu] = useState<{ x: number; y: number; fileId: string } | null>(null);
@@ -114,6 +115,15 @@ export function FileContextMenu() {
             }
           />
           <MenuItem
+            label="エクスポート…"
+            onClick={() =>
+              void runAndClose(async () => {
+                const dest = await open({ directory: true, multiple: false });
+                if (typeof dest === "string") await copyFile(file!.absolutePath, dest);
+              })
+            }
+          />
+          <MenuItem
             label="ゴミ箱"
             onClick={() =>
               void runAndClose(async () => {
@@ -127,17 +137,27 @@ export function FileContextMenu() {
         </>
       )}
       {isMobile && !file!.isDirectory && (
-        <MenuItem
-          label="ライブラリから削除"
-          onClick={() =>
-            void runAndClose(async () => {
-              if (confirm(`「${file!.displayName}」を削除しますか？`)) {
-                await removeFromLibrary(file!.id);
-                selectFile(null);
-              }
-            })
-          }
-        />
+        <>
+          <MenuItem
+            label="共有"
+            onClick={() =>
+              void runAndClose(async () => {
+                await shareFileEntry(file!);
+              })
+            }
+          />
+          <MenuItem
+            label="ライブラリから削除"
+            onClick={() =>
+              void runAndClose(async () => {
+                if (confirm(`「${file!.displayName}」を削除しますか？`)) {
+                  await removeFromLibrary(file!.id);
+                  selectFile(null);
+                }
+              })
+            }
+          />
+        </>
       )}
     </div>
   );

@@ -222,6 +222,10 @@ class FolderImportPlugin: Plugin {
     super.init()
   }
 
+  private struct ShareFileArgs: Decodable {
+    let path: String
+  }
+
   private static let importContentTypes: [UTType] = [
     .folder,
     .image,
@@ -257,6 +261,35 @@ class FolderImportPlugin: Plugin {
       picker.delegate = delegate
       picker.modalPresentationStyle = .fullScreen
       presenter.present(picker, animated: true)
+    }
+  }
+
+  @objc public func shareFile(_ invoke: Invoke) throws {
+    guard let args = invoke.parseArgs(ShareFileArgs.self) else { return }
+    let url = URL(fileURLWithPath: args.path)
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      invoke.reject("File not found")
+      return
+    }
+
+    DispatchQueue.main.async {
+      guard let presenter = self.manager.viewController else {
+        invoke.reject("View controller unavailable")
+        return
+      }
+
+      let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+      if let popover = activity.popoverPresentationController {
+        popover.sourceView = presenter.view
+        popover.sourceRect = CGRect(
+          x: presenter.view.bounds.midX,
+          y: presenter.view.bounds.midY,
+          width: 0,
+          height: 0
+        )
+      }
+      presenter.present(activity, animated: true)
+      invoke.resolve()
     }
   }
 
