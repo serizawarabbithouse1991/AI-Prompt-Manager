@@ -6,7 +6,7 @@ export function useSelectedFileDetails() {
   const selectedFile = useFileStore((s) => s.selectedFile);
   const setMetadata = useFileStore((s) => s.setMetadata);
   const setTags = useFileStore((s) => s.setTags);
-  const refresh = useFileStore((s) => s.refresh);
+  const updateFileThumbnail = useFileStore((s) => s.updateFileThumbnail);
 
   useEffect(() => {
     if (!selectedFile || selectedFile.isDirectory) {
@@ -29,8 +29,10 @@ export function useSelectedFileDetails() {
         setTags(tags);
 
         if (selectedFile!.fileKind === "image" && !selectedFile!.thumbnailPath) {
-          await getThumbnail(selectedFile!.id, 512).catch(() => null);
-          if (!cancelled) await refresh();
+          const thumb = await getThumbnail(selectedFile!.id, 512).catch(() => null);
+          if (!cancelled && thumb) {
+            updateFileThumbnail(selectedFile!.id, thumb);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -44,7 +46,7 @@ export function useSelectedFileDetails() {
     return () => {
       cancelled = true;
     };
-  }, [selectedFile, setMetadata, setTags, refresh]);
+  }, [selectedFile, setMetadata, setTags, updateFileThumbnail]);
 }
 
 export function useInitializeApp() {

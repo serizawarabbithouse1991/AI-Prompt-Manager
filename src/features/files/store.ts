@@ -46,6 +46,7 @@ type FileStore = {
   setMetadata: (metadata: AIGenerationMetadata | null) => void;
   setTags: (tags: Tag[]) => void;
   setAllTags: (tags: Tag[]) => void;
+  updateFileThumbnail: (fileId: string, thumbnailPath: string) => void;
 };
 
 function findFile(files: FileEntry[], id: string | null): FileEntry | null {
@@ -80,6 +81,17 @@ export const useFileStore = create<FileStore>((set, get) => ({
   setTags: (tags) => set({ tags }),
   setAllTags: (tags) => set({ allTags: tags }),
 
+  updateFileThumbnail: (fileId, thumbnailPath) => {
+    set((state) => {
+      const files = state.files.map((f) =>
+        f.id === fileId ? { ...f, thumbnailPath } : f,
+      );
+      const selectedFile =
+        state.selectedFileId === fileId ? findFile(files, fileId) : state.selectedFile;
+      return { files, selectedFile };
+    });
+  },
+
   initialize: async () => {
     set({ loading: true, error: null });
     try {
@@ -92,17 +104,20 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   loadDirectory: async (path: string) => {
+    const { selectedFileId, metadata, tags, inspectorOpen } = get();
     set({ loading: true, error: null });
     try {
       const files = await listDirectory(path);
+      const selectedFile = findFile(files, selectedFileId);
       set({
         currentPath: path,
         files,
         loading: false,
-        selectedFileId: null,
-        selectedFile: null,
-        metadata: null,
-        tags: [],
+        selectedFileId: selectedFile ? selectedFileId : null,
+        selectedFile,
+        metadata: selectedFile ? metadata : null,
+        tags: selectedFile ? tags : [],
+        inspectorOpen: selectedFile ? inspectorOpen : false,
       });
     } catch (e) {
       set({ error: String(e), loading: false });
