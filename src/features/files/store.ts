@@ -9,6 +9,7 @@ import {
   listFavorites,
   searchFiles,
 } from "@/lib/tauri";
+import { getPlatform, isMobilePlatform } from "@/lib/platform";
 
 type FileStore = {
   specialPaths: SpecialPaths | null;
@@ -95,9 +96,16 @@ export const useFileStore = create<FileStore>((set, get) => ({
   initialize: async () => {
     set({ loading: true, error: null });
     try {
-      const specialPaths = await getSpecialPaths();
-      set({ specialPaths });
-      await get().navigateTo(specialPaths.home);
+      const [specialPaths, platformName] = await Promise.all([
+        getSpecialPaths(),
+        getPlatform(),
+      ]);
+      set({ specialPaths, platformName });
+      if (isMobilePlatform(platformName)) {
+        await get().setViewMode("ai-library");
+      } else {
+        await get().navigateTo(specialPaths.home);
+      }
     } catch (e) {
       set({ error: String(e), loading: false });
     }

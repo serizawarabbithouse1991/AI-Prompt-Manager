@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use crate::models::file::SpecialPaths;
 
 pub mod android;
+#[cfg(target_os = "ios")]
+pub mod ios;
 pub mod macos;
 pub mod windows;
 
@@ -19,7 +21,16 @@ pub fn get_special_paths(app_data: &Path) -> Result<SpecialPaths, String> {
     {
         return android::get_special_paths(app_data);
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
+    #[cfg(target_os = "ios")]
+    {
+        return ios::get_special_paths(app_data);
+    }
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "android",
+        target_os = "ios"
+    )))]
     {
         let home = dirs_fallback_home()?;
         Ok(SpecialPaths {
@@ -64,13 +75,13 @@ pub fn reveal_in_file_manager(path: &str) -> Result<(), String> {
 }
 
 pub fn trash_file(path: &str) -> Result<(), String> {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         return trash::delete(path).map_err(|e| e.to_string());
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = path;
-        Err("Use remove_from_library on Android".to_string())
+        Err("Use remove_from_library on mobile".to_string())
     }
 }

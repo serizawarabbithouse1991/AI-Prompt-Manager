@@ -8,11 +8,12 @@ import { TagEditor } from "@/components/metadata/TagEditor";
 import { formatBytes, formatDate } from "@/lib/format";
 import {
   renameFile,
+  removeFromLibrary,
   revealInFileManager,
   setFavorite,
   trashFile,
 } from "@/lib/tauri";
-import { isDesktopPlatform } from "@/lib/platform";
+import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
 
 export function Inspector() {
   const selectedFile = useFileStore((s) => s.selectedFile);
@@ -29,6 +30,7 @@ export function Inspector() {
   useSelectedFileDetails();
 
   const isDesktop = isDesktopPlatform(platformName);
+  const isMobile = isMobilePlatform(platformName);
 
   if (!selectedFile) {
     return (
@@ -55,6 +57,14 @@ export function Inspector() {
   async function handleTrash() {
     if (!confirm(`「${selectedFile!.displayName}」をゴミ箱へ移動しますか？`)) return;
     await trashFile(selectedFile!.absolutePath);
+    useFileStore.getState().selectFile(null);
+    await refresh();
+  }
+
+  async function handleRemoveFromLibrary() {
+    if (!confirm(`「${selectedFile!.displayName}」をライブラリから削除しますか？`)) return;
+    await removeFromLibrary(selectedFile!.id);
+    useFileStore.getState().selectFile(null);
     await refresh();
   }
 
@@ -108,10 +118,23 @@ export function Inspector() {
             >
               Finder/Explorer
             </button>
-            <button type="button" onClick={() => void handleTrash()} className="action-btn-danger">
+            <button
+              type="button"
+              onClick={() => void handleTrash()}
+              className="action-btn-danger"
+            >
               ゴミ箱
             </button>
           </>
+        )}
+        {isMobile && !selectedFile.isDirectory && (
+          <button
+            type="button"
+            onClick={() => void handleRemoveFromLibrary()}
+            className="action-btn-danger"
+          >
+            削除
+          </button>
         )}
       </div>
 

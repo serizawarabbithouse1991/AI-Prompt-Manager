@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
-import { isAndroidPlatform, isDesktopPlatform } from "@/lib/platform";
+import { isMobilePlatform, isDesktopPlatform } from "@/lib/platform";
 import { importFromSaf, scanFolder } from "@/lib/tauri";
 
 export function Toolbar() {
@@ -38,7 +38,7 @@ export function Toolbar() {
     }
   }
 
-  async function handleAndroidImport() {
+  async function handleMobileImport() {
     const selected = await open({
       multiple: true,
       filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
@@ -79,7 +79,7 @@ export function Toolbar() {
   }
 
   const isDesktop = isDesktopPlatform(platformName);
-  const isAndroid = isAndroidPlatform(platformName);
+  const isMobile = isMobilePlatform(platformName);
 
   return (
     <header className="flex h-12 items-center gap-2 border-b border-neutral-800 bg-neutral-950 px-3">
@@ -121,11 +121,11 @@ export function Toolbar() {
           {scanning ? "スキャン中" : "スキャン"}
         </button>
       )}
-      {isAndroid && (
+      {isMobile && (
         <button
           type="button"
           disabled={scanning}
-          onClick={() => void handleAndroidImport()}
+          onClick={() => void handleMobileImport()}
           className="toolbar-btn whitespace-nowrap"
         >
           画像を追加

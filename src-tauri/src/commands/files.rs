@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tauri::AppHandle;
 
@@ -91,25 +91,30 @@ pub async fn import_from_saf(app: AppHandle, uri: String) -> Result<FileEntry, S
     let dest = ai_library_dir(&app_data);
     std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
 
-    let file_name = format!("import_{}.png", chrono::Utc::now().timestamp());
-    let dest_path = dest.join(&file_name);
+    let file_name = {
+        let stamp = chrono::Utc::now().timestamp();
+        let source_name = uri
+            .trim_start_matches("file://")
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|name| !name.is_empty())
+            .unwrap_or("import.png");
+        format!("import_{stamp}_{source_name}")
+    };
 
     #[cfg(target_os = "android")]
-    {
-        platform::android::import_from_saf(&uri, &dest)?;
-    }
+    let dest_path = {
+        let imported = platform::android::import_from_saf(&uri, &dest)?;
+        dest.join(imported)
+    };
 
     #[cfg(not(target_os = "android"))]
-    {
-        if uri.starts_with("file://") {
-            let source = uri.trim_start_matches("file://");
-            std::fs::copy(source, &dest_path).map_err(|e| e.to_string())?;
-        } else if Path::new(&uri).exists() {
-            std::fs::copy(&uri, &dest_path).map_err(|e| e.to_string())?;
-        } else {
-            return Err("Invalid import URI".to_string());
-        }
-    }
+    let dest_path = {
+        let path = dest.join(&file_name);
+        let source = resolve_import_source(&uri)?;
+        std::fs::copy(&source, &path).map_err(|e| e.to_string())?;
+        path
+    };
 
     let path_str = dest_path.to_string_lossy().to_string();
     let (width, height) = image::image_dimensions(&dest_path)
@@ -171,4 +176,26 @@ pub async fn remove_from_library(app: AppHandle, file_id: String) -> Result<(), 
         }
         files_repo::mark_deleted(conn, &file.absolute_path)
     })
+}
+
+fn resolve_import_source(uri: &str) -> Result<PathBuf, String> {
+    if uri.starts_with("file://") {
+        let raw = uri.trim_start_matches("file://");
+        let path = if raw.starts_with('/') {
+            raw.to_string()
+        } else {
+            format!("/{raw}")
+        };
+        let path = PathBuf::from(path);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    let direct = PathBuf::from(uri);
+    if direct.exists() {
+        return Ok(direct);
+    }
+
+    Err(format!("Invalid import URI: {uri}"))
 }

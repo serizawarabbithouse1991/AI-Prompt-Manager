@@ -12,6 +12,14 @@ export function isAndroidPlatform(platformName: string): boolean {
   return platformName === "android";
 }
 
+export function isIOSPlatform(platformName: string): boolean {
+  return platformName === "ios";
+}
+
+export function isMobilePlatform(platformName: string): boolean {
+  return isAndroidPlatform(platformName) || isIOSPlatform(platformName);
+}
+
 export function isDesktopPlatform(platformName: string): boolean {
   return platformName === "macos" || platformName === "windows" || platformName === "linux";
 }

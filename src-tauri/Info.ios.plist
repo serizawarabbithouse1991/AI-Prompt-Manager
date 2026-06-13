@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>AI生成画像をライブラリに取り込むために写真ライブラリへのアクセスが必要です。</string>
+	<key>UISupportsDocumentBrowser</key>
+	<true/>
+</dict>
+</plist>
