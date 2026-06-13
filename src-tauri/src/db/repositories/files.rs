@@ -25,6 +25,7 @@ fn row_to_file(row: &Row) -> Result<FileEntry, rusqlite::Error> {
         is_favorite: row.get::<_, i64>("is_favorite")? != 0,
         is_deleted: row.get::<_, i64>("is_deleted")? != 0,
         thumbnail_path: None,
+        tag_ids: Vec::new(),
     })
 }
 
@@ -123,6 +124,61 @@ pub fn list_ai_library(conn: &Connection, ai_library_prefix: &str) -> Result<Vec
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+pub fn get_file_tag_ids(conn: &Connection, file_id: &str) -> Result<Vec<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT tag_id FROM file_tags WHERE file_id = ?1 ORDER BY tag_id")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![file_id], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn ensure_file_by_path(conn: &Connection, path: &str) -> Result<FileEntry, String> {
+    if let Some(entry) = file_from_path(conn, path)? {
+        return Ok(entry);
+    }
+    let entry = build_entry_from_metadata(std::path::Path::new(path), None, None)?;
+    upsert_file(conn, &entry)?;
+    Ok(entry)
+}
+
+pub fn merge_db_info(conn: &Connection, entries: &mut [FileEntry]) -> Result<(), String> {
+    for entry in entries.iter_mut() {
+        if let Some(db_entry) = file_from_path(conn, &entry.absolute_path)? {
+            entry.is_favorite = db_entry.is_favorite;
+            entry.id = db_entry.id;
+        }
+        entry.tag_ids = get_file_tag_ids(conn, &entry.id)?;
+    }
+    Ok(())
+}
+
+pub fn attach_db_metadata(conn: &Connection, files: &mut [FileEntry]) -> Result<(), String> {
+    merge_db_info(conn, files)?;
+    attach_thumbnail_paths(conn, files)
+}
+
+pub fn set_favorite_with_upsert(
+    conn: &Connection,
+    file_id: &str,
+    absolute_path: &str,
+    is_favorite: bool,
+) -> Result<(), String> {
+    let changed = conn
+        .execute(
+            "UPDATE files SET is_favorite = ?1 WHERE id = ?2",
+            params![is_favorite as i64, file_id],
+        )
+        .map_err(|e| e.to_string())?;
+    if changed == 0 {
+        let mut entry = ensure_file_by_path(conn, absolute_path)?;
+        entry.is_favorite = is_favorite;
+        upsert_file(conn, &entry)?;
+    }
+    Ok(())
+}
+
 pub fn set_favorite(conn: &Connection, file_id: &str, is_favorite: bool) -> Result<(), String> {
     conn.execute(
         "UPDATE files SET is_favorite = ?1 WHERE id = ?2",
@@ -204,6 +260,7 @@ pub fn build_entry_from_metadata(
         is_favorite: false,
         is_deleted: false,
         thumbnail_path: None,
+        tag_ids: Vec::new(),
     })
 }
 

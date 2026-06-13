@@ -9,6 +9,13 @@ use crate::models::file::{FileEntry, ImportResult, ScanResult, SpecialPaths};
 use crate::platform::{self, ai_library_dir};
 use crate::services::{file_ops, file_scanner, import_service};
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRef {
+    pub file_id: String,
+    pub absolute_path: String,
+}
+
 #[tauri::command]
 pub fn get_platform_name() -> String {
     std::env::consts::OS.to_string()
@@ -38,9 +45,7 @@ pub async fn list_directory(app: AppHandle, path: String) -> Result<Vec<FileEntr
             .then(a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()))
     });
 
-    with_conn(&app, |conn| {
-        files_repo::attach_thumbnail_paths(conn, &mut entries)
-    })?;
+    with_conn(&app, |conn| files_repo::attach_db_metadata(conn, &mut entries))?;
 
     Ok(entries)
 }
@@ -71,7 +76,7 @@ pub async fn list_ai_library(app: AppHandle) -> Result<Vec<FileEntry>, String> {
     let ai_lib = ai_library_dir(&app_data).to_string_lossy().to_string();
     with_conn(&app, |conn| {
         let mut files = files_repo::list_ai_library(conn, &ai_lib)?;
-        files_repo::attach_thumbnail_paths(conn, &mut files)?;
+        files_repo::attach_db_metadata(conn, &mut files)?;
         Ok(files)
     })
 }
@@ -80,7 +85,7 @@ pub async fn list_ai_library(app: AppHandle) -> Result<Vec<FileEntry>, String> {
 pub async fn list_favorites(app: AppHandle) -> Result<Vec<FileEntry>, String> {
     with_conn(&app, |conn| {
         let mut files = files_repo::list_favorites(conn)?;
-        files_repo::attach_thumbnail_paths(conn, &mut files)?;
+        files_repo::attach_db_metadata(conn, &mut files)?;
         Ok(files)
     })
 }
@@ -165,5 +170,100 @@ pub async fn remove_from_library(app: AppHandle, file_id: String) -> Result<(), 
             std::fs::remove_file(&file.absolute_path).map_err(|e| e.to_string())?;
         }
         files_repo::mark_deleted(conn, &file.absolute_path)
+    })
+}
+
+#[tauri::command]
+pub async fn copy_file(
+    app: AppHandle,
+    source: String,
+    dest_dir: String,
+) -> Result<FileEntry, String> {
+    let new_path = file_ops::copy_on_disk(&source, &dest_dir)?;
+    with_conn(&app, |conn| {
+        let entry = files_repo::build_entry_from_metadata(&new_path, None, None)?;
+        files_repo::upsert_file(conn, &entry)?;
+        Ok(entry)
+    })
+}
+
+#[tauri::command]
+pub async fn move_file(
+    app: AppHandle,
+    source: String,
+    dest_dir: String,
+) -> Result<FileEntry, String> {
+    let new_path = file_ops::move_on_disk(&source, &dest_dir)?;
+    let old_path = source;
+    let new_path_str = new_path.to_string_lossy().to_string();
+    let new_name = new_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    with_conn(&app, |conn| files_repo::update_path(conn, &old_path, &new_path_str, &new_name))
+}
+
+#[tauri::command]
+pub async fn batch_set_favorite(
+    app: AppHandle,
+    files: Vec<FileRef>,
+    is_favorite: bool,
+) -> Result<(), String> {
+    with_conn(&app, |conn| {
+        for file in files {
+            files_repo::set_favorite_with_upsert(
+                conn,
+                &file.file_id,
+                &file.absolute_path,
+                is_favorite,
+            )?;
+        }
+        Ok(())
+    })
+}
+
+#[tauri::command]
+pub async fn batch_add_tag(
+    app: AppHandle,
+    files: Vec<FileRef>,
+    tag_id: String,
+) -> Result<(), String> {
+    with_conn(&app, |conn| {
+        for file in files {
+            crate::db::repositories::tags::add_tag_with_upsert(
+                conn,
+                &file.file_id,
+                &file.absolute_path,
+                &tag_id,
+            )?;
+        }
+        Ok(())
+    })
+}
+
+#[tauri::command]
+pub async fn batch_trash(app: AppHandle, paths: Vec<String>) -> Result<(), String> {
+    for path in paths {
+        file_ops::trash(&path)?;
+        with_conn(&app, |conn| files_repo::mark_deleted(conn, &path))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn batch_remove_from_library(
+    app: AppHandle,
+    file_ids: Vec<String>,
+) -> Result<(), String> {
+    with_conn(&app, |conn| {
+        for file_id in file_ids {
+            let file = files_repo::get_by_id(conn, &file_id)?
+                .ok_or_else(|| format!("File not found: {file_id}"))?;
+            if Path::new(&file.absolute_path).exists() {
+                std::fs::remove_file(&file.absolute_path).map_err(|e| e.to_string())?;
+            }
+            files_repo::mark_deleted(conn, &file.absolute_path)?;
+        }
+        Ok(())
     })
 }

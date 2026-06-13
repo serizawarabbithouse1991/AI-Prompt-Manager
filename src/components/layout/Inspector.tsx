@@ -43,7 +43,7 @@ export function Inspector() {
   }
 
   async function handleFavorite() {
-    await setFavorite(selectedFile!.id, !selectedFile!.isFavorite);
+    await setFavorite(selectedFile!.id, !selectedFile!.isFavorite, selectedFile!.absolutePath);
     await refresh();
   }
 
@@ -85,9 +85,17 @@ export function Inspector() {
 
       {!selectedFile.isDirectory && (
         <>
-          <PromptPanel metadata={metadata} />
-          <MetadataPanel metadata={metadata} />
-          <TagEditor fileId={selectedFile.id} tags={tags} allTags={allTags} />
+          <PromptPanel
+            metadata={metadata}
+            filePath={selectedFile.absolutePath}
+          />
+          <MetadataPanel metadata={metadata} fileId={selectedFile.id} />
+          <TagEditor
+            fileId={selectedFile.id}
+            absolutePath={selectedFile.absolutePath}
+            tags={tags}
+            allTags={allTags}
+          />
         </>
       )}
 
@@ -128,13 +136,25 @@ export function Inspector() {
           </>
         )}
         {isMobile && !selectedFile.isDirectory && (
-          <button
-            type="button"
-            onClick={() => void handleRemoveFromLibrary()}
-            className="action-btn-danger"
-          >
-            削除
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setNewName(selectedFile.displayName);
+                setRenaming(true);
+              }}
+              className="action-btn"
+            >
+              リネーム
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRemoveFromLibrary()}
+              className="action-btn-danger"
+            >
+              削除
+            </button>
+          </>
         )}
       </div>
 

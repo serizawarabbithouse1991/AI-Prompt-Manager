@@ -28,6 +28,7 @@ export type FileEntry = {
   isFavorite: boolean;
   isDeleted: boolean;
   thumbnailPath?: string | null;
+  tagIds?: string[];
 };
 
 export type SpecialPaths = {
@@ -53,3 +54,14 @@ export type ImportResult = {
 };
 
 export type ViewMode = "browse" | "search" | "favorites" | "ai-library" | "settings";
+
+export type SortField = "name" | "modified" | "size" | "kind";
+export type SortOrder = "asc" | "desc";
+export type FileFilter = "all" | "images" | "favorites" | "tag";
+export type LayoutMode = "grid" | "list";
+
+export type Bookmark = {
+  id: string;
+  label: string;
+  path: string;
+};

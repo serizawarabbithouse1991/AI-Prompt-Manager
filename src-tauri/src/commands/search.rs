@@ -8,7 +8,7 @@ use crate::models::file::FileEntry;
 pub async fn search_files(app: AppHandle, query: String) -> Result<Vec<FileEntry>, String> {
     with_conn(&app, |conn| {
         let mut files = files_repo::search_files(conn, &query)?;
-        files_repo::attach_thumbnail_paths(conn, &mut files)?;
+        files_repo::attach_db_metadata(conn, &mut files)?;
         Ok(files)
     })
 }

@@ -12,6 +12,7 @@ export function Toolbar() {
   const refresh = useFileStore((s) => s.refresh);
   const scanning = useFileStore((s) => s.scanning);
   const scanProgress = useFileStore((s) => s.scanProgress);
+  const batchProgress = useFileStore((s) => s.batchProgress);
   const setScanning = useFileStore((s) => s.setScanning);
   const setScanProgress = useFileStore((s) => s.setScanProgress);
   const setViewMode = useFileStore((s) => s.setViewMode);
@@ -113,6 +114,9 @@ export function Toolbar() {
       </button>
       {scanProgress && (
         <span className="hidden truncate text-xs text-neutral-500 lg:block">{scanProgress}</span>
+      )}
+      {batchProgress && (
+        <span className="hidden truncate text-xs text-blue-400 lg:block">{batchProgress}</span>
       )}
     </header>
   );

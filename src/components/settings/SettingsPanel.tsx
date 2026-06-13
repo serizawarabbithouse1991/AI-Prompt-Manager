@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
-import { importPaths, pickImportItems, pickImportPhotos } from "@/lib/tauri";
-import { isDesktopPlatform, isIOSPlatform, isMobilePlatform } from "@/lib/platform";
+import { importFromSaf, importPaths, pickImportItems, pickImportPhotos } from "@/lib/tauri";
+import {
+  isAndroidPlatform,
+  isDesktopPlatform,
+  isIOSPlatform,
+  isMobilePlatform,
+} from "@/lib/platform";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 
@@ -28,6 +33,8 @@ export function SettingsPanel() {
 
   const isDesktop = isDesktopPlatform(platformName);
   const isMobile = isMobilePlatform(platformName);
+  const isIOS = isIOSPlatform(platformName);
+  const isAndroid = isAndroidPlatform(platformName);
 
   async function runImport(paths: string[], label: string) {
     if (paths.length === 0) return;
@@ -61,9 +68,15 @@ export function SettingsPanel() {
   }
 
   async function handleImportFromICloud() {
-    if (isMobile) {
+    if (isIOS) {
       const paths = await pickImportItems();
       await runImport(paths, "iCloud/ファイル・フォルダからインポート");
+      return;
+    }
+
+    if (isAndroid) {
+      const selected = await open({ multiple: true, filters: IMAGE_AND_ZIP_FILTERS });
+      await runImport(normalizeSelectedPaths(selected), "SAF/ファイルからインポート");
       return;
     }
 
@@ -72,9 +85,15 @@ export function SettingsPanel() {
   }
 
   async function handleImportFromPhotoLibrary() {
-    if (isIOSPlatform(platformName)) {
+    if (isIOS) {
       const paths = await pickImportPhotos();
       await runImport(paths, "写真ライブラリからインポート");
+      return;
+    }
+
+    if (isAndroid) {
+      const selected = await open(PHOTO_LIBRARY_OPTIONS);
+      await runImport(normalizeSelectedPaths(selected), "画像からインポート");
       return;
     }
 
@@ -83,9 +102,35 @@ export function SettingsPanel() {
   }
 
   async function handleImportFolder() {
+    if (isAndroid) {
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected !== "string") return;
+      await runImport([selected], "フォルダからインポート");
+      return;
+    }
+
     const selected = await open({ directory: true, multiple: false, recursive: true });
     if (typeof selected !== "string") return;
     await runImport([selected], "フォルダからインポート");
+  }
+
+  async function handleSafImport() {
+    const selected = await open({ multiple: false, filters: IMAGE_AND_ZIP_FILTERS });
+    const paths = normalizeSelectedPaths(selected);
+    if (paths.length === 0) return;
+    const uri = paths[0];
+    setScanning(true);
+    setScanProgress("SAF インポート中…");
+    try {
+      await importFromSaf(uri);
+      setScanProgress("SAF インポート完了");
+      setLastResult("SAF インポート完了");
+      await setViewMode("ai-library");
+    } catch {
+      await runImport(paths, "ファイルからインポート（フォールバック）");
+    } finally {
+      setScanning(false);
+    }
   }
 
   return (
@@ -101,13 +146,19 @@ export function SettingsPanel() {
         <section className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
           <h2 className="text-sm font-medium">インポート</h2>
           <p className="text-xs text-neutral-500">
-            {isMobile
+            {isIOS
               ? "iCloud では画像ファイル・ZIP・画像フォルダをまとめて選べます。写真ライブラリはオリジナルファイルを保持してインポートします（AIメタデータ付き画像向け）。"
-              : "ファイルピッカーで iCloud Drive 内の画像・ZIP、またはフォルダを選べます。"}
+              : isAndroid
+                ? "Android ではファイルピッカー（SAF）経由で画像・ZIP・フォルダをインポートします。"
+                : "ファイルピッカーで iCloud Drive 内の画像・ZIP、またはフォルダを選べます。"}
           </p>
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => void handleImportFromICloud()} className="action-btn">
-              {isMobile ? "iCloud / ファイル・フォルダを選択" : "画像・ZIP を選択"}
+              {isIOS
+                ? "iCloud / ファイル・フォルダを選択"
+                : isAndroid
+                  ? "ファイルを選択（SAF）"
+                  : "画像・ZIP を選択"}
             </button>
             {isMobile && (
               <button
@@ -115,12 +166,17 @@ export function SettingsPanel() {
                 onClick={() => void handleImportFromPhotoLibrary()}
                 className="action-btn"
               >
-                写真ライブラリから選択
+                {isAndroid ? "画像を選択" : "写真ライブラリから選択"}
               </button>
             )}
-            {isDesktop && (
+            {(isDesktop || isAndroid) && (
               <button type="button" onClick={() => void handleImportFolder()} className="action-btn">
-                フォルダを選択（iCloud 含む）
+                フォルダを選択
+              </button>
+            )}
+            {isAndroid && (
+              <button type="button" onClick={() => void handleSafImport()} className="action-btn">
+                SAF 単一ファイルインポート
               </button>
             )}
           </div>

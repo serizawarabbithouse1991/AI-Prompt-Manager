@@ -3,6 +3,11 @@ import type { AIGenerationMetadata, UpdateMetadataPayload } from "@/features/met
 import type { Tag } from "@/features/tags/types";
 import type { FileEntry, ImportResult, ScanResult, SpecialPaths } from "@/features/files/types";
 
+export type FileRef = {
+  fileId: string;
+  absolutePath: string;
+};
+
 export async function listDirectory(path: string): Promise<FileEntry[]> {
   return invoke<FileEntry[]>("list_directory", { path });
 }
@@ -70,8 +75,16 @@ export async function createTag(name: string, color?: string | null): Promise<Ta
   return invoke<Tag>("create_tag", { name, color: color ?? null });
 }
 
-export async function addTagToFile(fileId: string, tagId: string): Promise<void> {
-  return invoke("add_tag_to_file", { fileId, tagId });
+export async function addTagToFile(
+  fileId: string,
+  tagId: string,
+  absolutePath?: string | null,
+): Promise<void> {
+  return invoke("add_tag_to_file", {
+    fileId,
+    tagId,
+    absolutePath: absolutePath ?? null,
+  });
 }
 
 export async function removeTagFromFile(fileId: string, tagId: string): Promise<void> {
@@ -82,8 +95,16 @@ export async function getFileTags(fileId: string): Promise<Tag[]> {
   return invoke<Tag[]>("get_file_tags", { fileId });
 }
 
-export async function setFavorite(fileId: string, isFavorite: boolean): Promise<void> {
-  return invoke("set_favorite", { fileId, isFavorite });
+export async function setFavorite(
+  fileId: string,
+  isFavorite: boolean,
+  absolutePath?: string | null,
+): Promise<void> {
+  return invoke("set_favorite", {
+    fileId,
+    isFavorite,
+    absolutePath: absolutePath ?? null,
+  });
 }
 
 export async function listFavorites(): Promise<FileEntry[]> {
@@ -108,4 +129,31 @@ export async function revealInFileManager(path: string): Promise<void> {
 
 export async function removeFromLibrary(fileId: string): Promise<void> {
   return invoke("remove_from_library", { fileId });
+}
+
+export async function copyFile(source: string, destDir: string): Promise<FileEntry> {
+  return invoke<FileEntry>("copy_file", { source, destDir });
+}
+
+export async function moveFile(source: string, destDir: string): Promise<FileEntry> {
+  return invoke<FileEntry>("move_file", { source, destDir });
+}
+
+export async function batchSetFavorite(
+  files: FileRef[],
+  isFavorite: boolean,
+): Promise<void> {
+  return invoke("batch_set_favorite", { files, isFavorite });
+}
+
+export async function batchAddTag(files: FileRef[], tagId: string): Promise<void> {
+  return invoke("batch_add_tag", { files, tagId });
+}
+
+export async function batchTrash(paths: string[]): Promise<void> {
+  return invoke("batch_trash", { paths });
+}
+
+export async function batchRemoveFromLibrary(fileIds: string[]): Promise<void> {
+  return invoke("batch_remove_from_library", { fileIds });
 }

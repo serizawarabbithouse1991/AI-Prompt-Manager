@@ -23,8 +23,15 @@ pub async fn add_tag_to_file(
     app: AppHandle,
     file_id: String,
     tag_id: String,
+    absolute_path: Option<String>,
 ) -> Result<(), String> {
-    with_conn(&app, |conn| tags_repo::add_tag_to_file(conn, &file_id, &tag_id))
+    with_conn(&app, |conn| {
+        if let Some(path) = absolute_path {
+            tags_repo::add_tag_with_upsert(conn, &file_id, &path, &tag_id)
+        } else {
+            tags_repo::add_tag_to_file(conn, &file_id, &tag_id)
+        }
+    })
 }
 
 #[tauri::command]
@@ -46,6 +53,13 @@ pub async fn set_favorite(
     app: AppHandle,
     file_id: String,
     is_favorite: bool,
+    absolute_path: Option<String>,
 ) -> Result<(), String> {
-    with_conn(&app, |conn| files_repo::set_favorite(conn, &file_id, is_favorite))
+    with_conn(&app, |conn| {
+        if let Some(path) = absolute_path {
+            files_repo::set_favorite_with_upsert(conn, &file_id, &path, is_favorite)
+        } else {
+            files_repo::set_favorite(conn, &file_id, is_favorite)
+        }
+    })
 }

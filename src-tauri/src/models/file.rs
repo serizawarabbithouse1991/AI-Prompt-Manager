@@ -22,6 +22,8 @@ pub struct FileEntry {
     pub is_favorite: bool,
     pub is_deleted: bool,
     pub thumbnail_path: Option<String>,
+    #[serde(default)]
+    pub tag_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

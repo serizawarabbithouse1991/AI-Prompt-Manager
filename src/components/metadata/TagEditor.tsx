@@ -5,18 +5,19 @@ import { useFileStore } from "@/features/files/store";
 
 type TagEditorProps = {
   fileId: string;
+  absolutePath: string;
   tags: Tag[];
   allTags: Tag[];
 };
 
-export function TagEditor({ fileId, tags, allTags }: TagEditorProps) {
+export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProps) {
   const [newTagName, setNewTagName] = useState("");
   const setTags = useFileStore((s) => s.setTags);
   const setAllTags = useFileStore((s) => s.setAllTags);
   const refreshAllTags = useFileStore((s) => s.setAllTags);
 
   async function handleAddExisting(tagId: string) {
-    await addTagToFile(fileId, tagId);
+    await addTagToFile(fileId, tagId, absolutePath);
     const updated = await getFileTags(fileId);
     setTags(updated);
   }
@@ -30,7 +31,7 @@ export function TagEditor({ fileId, tags, allTags }: TagEditorProps) {
     const name = newTagName.trim();
     if (!name) return;
     const tag = await createTag(name);
-    await addTagToFile(fileId, tag.id);
+    await addTagToFile(fileId, tag.id, absolutePath);
     setNewTagName("");
     const [fileTags, updatedAll] = await Promise.all([
       getFileTags(fileId),

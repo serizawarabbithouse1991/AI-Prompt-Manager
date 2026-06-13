@@ -2,6 +2,7 @@ use rusqlite::{params, Connection, Row};
 use uuid::Uuid;
 
 use crate::db::connection::now_iso;
+use crate::db::repositories::files as files_repo;
 use crate::models::tag::Tag;
 
 fn row_to_tag(row: &Row) -> Result<Tag, rusqlite::Error> {
@@ -49,6 +50,18 @@ pub fn add_tag_to_file(conn: &Connection, file_id: &str, tag_id: &str) -> Result
     Ok(())
 }
 
+pub fn add_tag_with_upsert(
+    conn: &Connection,
+    file_id: &str,
+    absolute_path: &str,
+    tag_id: &str,
+) -> Result<(), String> {
+    if files_repo::get_by_id(conn, file_id)?.is_none() {
+        files_repo::ensure_file_by_path(conn, absolute_path)?;
+    }
+    add_tag_to_file(conn, file_id, tag_id)
+}
+
 pub fn remove_tag_from_file(conn: &Connection, file_id: &str, tag_id: &str) -> Result<(), String> {
     conn.execute(
         "DELETE FROM file_tags WHERE file_id = ?1 AND tag_id = ?2",
@@ -68,4 +81,11 @@ pub fn get_file_tags(conn: &Connection, file_id: &str) -> Result<Vec<Tag>, Strin
         .query_map(params![file_id], |row| row_to_tag(row))
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn attach_tag_ids(conn: &Connection, files: &mut [crate::models::file::FileEntry]) -> Result<(), String> {
+    for file in files.iter_mut() {
+        file.tag_ids = files_repo::get_file_tag_ids(conn, &file.id)?;
+    }
+    Ok(())
 }

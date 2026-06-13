@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useFileStore } from "@/features/files/store";
 import { isDesktopPlatform } from "@/lib/platform";
 
@@ -16,10 +17,15 @@ const COMMON_ITEMS = [
 
 export function Sidebar() {
   const specialPaths = useFileStore((s) => s.specialPaths);
+  const currentPath = useFileStore((s) => s.currentPath);
   const navigateTo = useFileStore((s) => s.navigateTo);
   const setViewMode = useFileStore((s) => s.setViewMode);
   const viewMode = useFileStore((s) => s.viewMode);
   const platformName = useFileStore((s) => s.platformName);
+  const bookmarks = useFileStore((s) => s.bookmarks);
+  const addBookmark = useFileStore((s) => s.addBookmark);
+  const removeBookmark = useFileStore((s) => s.removeBookmark);
+  const [bookmarkLabel, setBookmarkLabel] = useState("");
   const isDesktop = isDesktopPlatform(platformName);
 
   return (
@@ -63,6 +69,49 @@ export function Sidebar() {
           </button>
         ))}
       </nav>
+
+      {isDesktop && currentPath && viewMode === "browse" && (
+        <div className="mt-4 space-y-2 border-t border-neutral-800 pt-3">
+          <h3 className="px-3 text-xs font-medium text-neutral-500">ブックマーク</h3>
+          <div className="flex gap-1 px-1">
+            <input
+              value={bookmarkLabel}
+              onChange={(e) => setBookmarkLabel(e.target.value)}
+              placeholder="ラベル"
+              className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const label = bookmarkLabel.trim() || currentPath.split(/[/\\]/).pop() || "Folder";
+                addBookmark(label, currentPath);
+                setBookmarkLabel("");
+              }}
+              className="action-btn"
+            >
+              追加
+            </button>
+          </div>
+          {bookmarks.map((bookmark) => (
+            <div key={bookmark.id} className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => void navigateTo(bookmark.path)}
+                className="sidebar-btn flex-1 truncate"
+              >
+                {bookmark.label}
+              </button>
+              <button
+                type="button"
+                onClick={() => removeBookmark(bookmark.id)}
+                className="px-2 text-xs text-neutral-500 hover:text-red-400"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }
