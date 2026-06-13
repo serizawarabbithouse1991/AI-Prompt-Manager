@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useFileStore } from "@/features/files/store";
-import { getFileTags, getMetadata, getThumbnail } from "@/lib/tauri";
+import { getFileTags, getMetadata, getThumbnail, extractMetadata } from "@/lib/tauri";
 
 export function useSelectedFileDetails() {
   const selectedFile = useFileStore((s) => s.selectedFile);
@@ -19,10 +19,11 @@ export function useSelectedFileDetails() {
 
     async function load() {
       try {
-        const [metadata, tags] = await Promise.all([
-          getMetadata(selectedFile!.id),
-          getFileTags(selectedFile!.id),
-        ]);
+        let metadata = await getMetadata(selectedFile!.id);
+        if (!metadata && selectedFile!.fileKind === "image") {
+          metadata = await extractMetadata(selectedFile!.absolutePath);
+        }
+        const tags = await getFileTags(selectedFile!.id);
         if (cancelled) return;
         setMetadata(metadata);
         setTags(tags);

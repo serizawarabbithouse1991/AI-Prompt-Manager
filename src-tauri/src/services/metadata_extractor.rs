@@ -83,7 +83,11 @@ pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGeneratio
         .or_else(|| raw_chunks.get("Parameters"))
     {
         parse_a1111_parameters(&mut meta, params);
-        meta.source_app = Some("Stable Diffusion WebUI".to_string());
+        if params.contains("Version: f2.") || params.contains("NovelAI") {
+            meta.source_app = Some("NovelAI".to_string());
+        } else {
+            meta.source_app = Some("Stable Diffusion WebUI".to_string());
+        }
         return Ok(Some(meta));
     }
 
@@ -126,11 +130,13 @@ fn parse_a1111_parameters(meta: &mut AIGenerationMetadata, params: &str) {
 }
 
 fn parse_a1111_tail(meta: &mut AIGenerationMetadata, tail: &str) {
-    let steps_re = Regex::new(r"Steps:\s*(\d+)").ok();
+    let steps_re = Regex::new(r"^(\d+),").ok();
     let sampler_re = Regex::new(r"Sampler:\s*([^,\n]+)").ok();
+    let scheduler_re = Regex::new(r"Schedule type:\s*([^,\n]+)").ok();
     let cfg_re = Regex::new(r"CFG scale:\s*([\d.]+)").ok();
     let seed_re = Regex::new(r"Seed:\s*(\d+)").ok();
     let size_re = Regex::new(r"Size:\s*(\d+)x(\d+)").ok();
+    let model_re = Regex::new(r"Model:\s*([^,\n]+)").ok();
 
     if let Some(re) = steps_re {
         if let Some(caps) = re.captures(tail) {
@@ -139,6 +145,12 @@ fn parse_a1111_tail(meta: &mut AIGenerationMetadata, tail: &str) {
     }
     if let Some(re) = sampler_re {
         meta.sampler = re
+            .captures(tail)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str().trim().to_string());
+    }
+    if let Some(re) = scheduler_re {
+        meta.scheduler = re
             .captures(tail)
             .and_then(|c| c.get(1))
             .map(|m| m.as_str().trim().to_string());
@@ -160,6 +172,12 @@ fn parse_a1111_tail(meta: &mut AIGenerationMetadata, tail: &str) {
             meta.generation_width = caps.get(1).and_then(|m| m.as_str().parse().ok());
             meta.generation_height = caps.get(2).and_then(|m| m.as_str().parse().ok());
         }
+    }
+    if let Some(re) = model_re {
+        meta.model = re
+            .captures(tail)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str().trim().to_string());
     }
 }
 
