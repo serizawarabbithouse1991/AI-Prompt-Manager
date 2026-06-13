@@ -34,7 +34,7 @@ export function Inspector() {
 
   if (!selectedFile) {
     return (
-      <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950">
+      <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950 lg:flex">
         <div className="flex flex-1 items-center justify-center p-4 text-sm text-neutral-500">
           ファイルを選択してください
         </div>
@@ -155,7 +155,7 @@ export function Inspector() {
 
   return (
     <>
-      <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950">
+      <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950 lg:flex">
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {content}
         </div>

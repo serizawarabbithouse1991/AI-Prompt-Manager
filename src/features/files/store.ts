@@ -196,6 +196,10 @@ export const useFileStore = create<FileStore>((set, get) => ({
         set({ files, loading: false, selectedFileId: null, selectedFile: null });
         return;
       }
+      if (mode === "settings") {
+        set({ loading: false, selectedFileId: null, selectedFile: null, inspectorOpen: false });
+        return;
+      }
       if (mode === "browse") {
         const { currentPath, specialPaths } = get();
         const path = currentPath || specialPaths?.home || "";
@@ -232,6 +236,8 @@ export const useFileStore = create<FileStore>((set, get) => ({
       await get().setViewMode("favorites");
     } else if (viewMode === "ai-library") {
       await get().setViewMode("ai-library");
+    } else if (viewMode === "settings") {
+      await get().setViewMode("settings");
     } else if (currentPath) {
       await get().loadDirectory(currentPath);
     }

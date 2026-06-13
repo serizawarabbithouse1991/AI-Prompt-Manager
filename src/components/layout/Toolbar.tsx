@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
-import { isMobilePlatform, isDesktopPlatform } from "@/lib/platform";
-import { importFromSaf, scanFolder } from "@/lib/tauri";
+import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
+import { scanFolder } from "@/lib/tauri";
 
 export function Toolbar() {
   const goBack = useFileStore((s) => s.goBack);
@@ -35,28 +35,6 @@ export function Toolbar() {
     const selected = await open({ directory: true, multiple: false });
     if (typeof selected === "string") {
       await useFileStore.getState().navigateTo(selected);
-    }
-  }
-
-  async function handleMobileImport() {
-    const selected = await open({
-      multiple: true,
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
-    });
-    if (!selected) return;
-    const paths = Array.isArray(selected) ? selected : [selected];
-    setScanning(true);
-    setScanProgress("インポート中…");
-    try {
-      for (const path of paths) {
-        await importFromSaf(path);
-      }
-      setScanProgress(`インポート完了: ${paths.length} 件`);
-      await setViewMode("ai-library");
-    } catch (e) {
-      setScanProgress(String(e));
-    } finally {
-      setScanning(false);
     }
   }
 
@@ -124,11 +102,10 @@ export function Toolbar() {
       {isMobile && (
         <button
           type="button"
-          disabled={scanning}
-          onClick={() => void handleMobileImport()}
+          onClick={() => void setViewMode("settings")}
           className="toolbar-btn whitespace-nowrap"
         >
-          画像を追加
+          設定
         </button>
       )}
       <button type="button" onClick={() => void refresh()} className="toolbar-btn">

@@ -43,6 +43,15 @@ pub struct ScanResult {
     pub error_count: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportResult {
+    pub imported_count: u32,
+    pub image_count: u32,
+    pub zip_count: u32,
+    pub error_count: u32,
+}
+
 pub fn detect_file_kind(extension: &str, is_directory: bool) -> String {
     if is_directory {
         return "directory".to_string();

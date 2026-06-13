@@ -1,13 +1,13 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use tauri::AppHandle;
 
 use crate::db::connection::{app_data_dir, with_conn};
 use crate::db::repositories::files as files_repo;
-use crate::models::file::{FileEntry, ScanResult, SpecialPaths};
+use crate::models::file::{FileEntry, ImportResult, ScanResult, SpecialPaths};
 use crate::platform::{self, ai_library_dir};
-use crate::services::{file_ops, file_scanner, thumbnailer};
+use crate::services::{file_ops, file_scanner, import_service};
 
 #[tauri::command]
 pub fn get_platform_name() -> String {
@@ -89,57 +89,47 @@ pub async fn list_favorites(app: AppHandle) -> Result<Vec<FileEntry>, String> {
 pub async fn import_from_saf(app: AppHandle, uri: String) -> Result<FileEntry, String> {
     let app_data = app_data_dir(&app)?;
     let dest = ai_library_dir(&app_data);
-    std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-
-    let file_name = {
-        let stamp = chrono::Utc::now().timestamp();
-        let source_name = uri
-            .trim_start_matches("file://")
-            .rsplit(['/', '\\'])
-            .next()
-            .filter(|name| !name.is_empty())
-            .unwrap_or("import.png");
-        format!("import_{stamp}_{source_name}")
-    };
 
     #[cfg(target_os = "android")]
-    let dest_path = {
+    {
         let imported = platform::android::import_from_saf(&uri, &dest)?;
-        dest.join(imported)
-    };
+        let dest_path = dest.join(imported);
+        let path_str = dest_path.to_string_lossy().to_string();
+        let (width, height) = image::image_dimensions(&dest_path)
+            .map(|(w, h)| (Some(w as i64), Some(h as i64)))
+            .unwrap_or((None, None));
+        let mut entry = files_repo::build_entry_from_metadata(&dest_path, width, height)?;
+        return with_conn(&app, |conn| {
+            files_repo::upsert_file(conn, &entry)?;
+            if let Ok(Some(meta)) =
+                crate::services::metadata_extractor::extract_from_file(&path_str, &entry.id)
+            {
+                crate::db::repositories::metadata::upsert_metadata(conn, &meta)?;
+            }
+            if let Ok(Some(thumb)) = thumbnailer::get_thumbnail_path(
+                conn,
+                &app_data,
+                &path_str,
+                &entry.id,
+                256,
+            ) {
+                entry.thumbnail_path = Some(thumb);
+            }
+            Ok(entry)
+        });
+    }
 
     #[cfg(not(target_os = "android"))]
-    let dest_path = {
-        let path = dest.join(&file_name);
-        let source = resolve_import_source(&uri)?;
-        std::fs::copy(&source, &path).map_err(|e| e.to_string())?;
-        path
-    };
+    {
+        with_conn(&app, |conn| import_service::import_single_file(conn, &app_data, &dest, &uri))
+    }
+}
 
-    let path_str = dest_path.to_string_lossy().to_string();
-    let (width, height) = image::image_dimensions(&dest_path)
-        .map(|(w, h)| (Some(w as i64), Some(h as i64)))
-        .unwrap_or((None, None));
-    let mut entry = files_repo::build_entry_from_metadata(&dest_path, width, height)?;
-
-    with_conn(&app, |conn| {
-        files_repo::upsert_file(conn, &entry)?;
-        if let Ok(Some(meta)) =
-            crate::services::metadata_extractor::extract_from_file(&path_str, &entry.id)
-        {
-            crate::db::repositories::metadata::upsert_metadata(conn, &meta)?;
-        }
-        if let Ok(Some(thumb)) = thumbnailer::get_thumbnail_path(
-            conn,
-            &app_data,
-            &path_str,
-            &entry.id,
-            256,
-        ) {
-            entry.thumbnail_path = Some(thumb);
-        }
-        Ok(entry)
-    })
+#[tauri::command]
+pub async fn import_paths(app: AppHandle, paths: Vec<String>) -> Result<ImportResult, String> {
+    let app_data = app_data_dir(&app)?;
+    let dest = ai_library_dir(&app_data);
+    with_conn(&app, |conn| import_service::import_paths(conn, &app_data, &dest, &paths))
 }
 
 #[tauri::command]
@@ -176,26 +166,4 @@ pub async fn remove_from_library(app: AppHandle, file_id: String) -> Result<(), 
         }
         files_repo::mark_deleted(conn, &file.absolute_path)
     })
-}
-
-fn resolve_import_source(uri: &str) -> Result<PathBuf, String> {
-    if uri.starts_with("file://") {
-        let raw = uri.trim_start_matches("file://");
-        let path = if raw.starts_with('/') {
-            raw.to_string()
-        } else {
-            format!("/{raw}")
-        };
-        let path = PathBuf::from(path);
-        if path.exists() {
-            return Ok(path);
-        }
-    }
-
-    let direct = PathBuf::from(uri);
-    if direct.exists() {
-        return Ok(direct);
-    }
-
-    Err(format!("Invalid import URI: {uri}"))
 }

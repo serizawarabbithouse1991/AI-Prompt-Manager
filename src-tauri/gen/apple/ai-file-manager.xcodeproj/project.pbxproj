@@ -7,13 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		10B5C79E2B22348682DFD12F /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 42EC9060A4586F9E32364ECB /* libapp.a */; };
+		10B5C79E2B22348682DFD12F /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A72CA06C0440FEC406F8CD63 /* libapp.a */; };
+		14C3CD3236403AB393013819 /* SwiftLinkStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 678752D3022A9AC15CE0C014 /* SwiftLinkStub.swift */; };
 		258E6EDAB7A05D979C44EBC5 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 28D318BC8817A2048EE143F0 /* Security.framework */; };
 		2A8B7C2BA11CD6B16DE776ED /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B04C3868DF26B164396F406 /* UIKit.framework */; };
 		2DC057F408C6989B55FE6993 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3963F78ABEC3C278F1DF280B /* WebKit.framework */; };
 		2F99AC4481B00ACC9112B5FB /* assets in Resources */ = {isa = PBXBuildFile; fileRef = E35DEE61C89666A9AB5E18E7 /* assets */; };
 		4865F509060D1C1DF279B52C /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 880C0620C7EF516730AA7B1D /* Metal.framework */; };
 		77EDC392CC47A565F693A170 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF3EEBF83686E4F33889203A /* CoreGraphics.framework */; };
+		996F4B633D6F320EB66611B2 /* libapp.a in Resources */ = {isa = PBXBuildFile; fileRef = A72CA06C0440FEC406F8CD63 /* libapp.a */; };
 		A9FE11F352B12C82EB3D2720 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1050C796A0140990C4520954 /* Assets.xcassets */; };
 		BC69D395CCC980D1D9CB618E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F11501BC1D14F876BA22859C /* MetalKit.framework */; };
 		CB56CDDF0AC3EA63C3040716 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 70473567770B108213A920E8 /* QuartzCore.framework */; };
@@ -22,6 +24,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		007CB4C8E5FC888CC3916653 /* ios.rs */ = {isa = PBXFileReference; path = ios.rs; sourceTree = "<group>"; };
+		0488607529CF28F0015F882A /* import_service.rs */ = {isa = PBXFileReference; path = import_service.rs; sourceTree = "<group>"; };
 		05355991BDC0DDD42FB4523B /* metadata_extractor.rs */ = {isa = PBXFileReference; path = metadata_extractor.rs; sourceTree = "<group>"; };
 		0BD69F87FC6E6A146967F0A4 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
 		0E73963340A766675F843883 /* tags.rs */ = {isa = PBXFileReference; path = tags.rs; sourceTree = "<group>"; };
@@ -35,10 +39,11 @@
 		2C05B59111813C75695E799B /* metadata.rs */ = {isa = PBXFileReference; path = metadata.rs; sourceTree = "<group>"; };
 		2C17E935B1B1B5B68D527272 /* thumbnails.rs */ = {isa = PBXFileReference; path = thumbnails.rs; sourceTree = "<group>"; };
 		3963F78ABEC3C278F1DF280B /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		39EBD8CAB970EEAD569F3073 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
 		3D19956E8CFCCDEDF1F00902 /* file.rs */ = {isa = PBXFileReference; path = file.rs; sourceTree = "<group>"; };
 		3D666A62F0E107042333ACB1 /* search.rs */ = {isa = PBXFileReference; path = search.rs; sourceTree = "<group>"; };
-		42EC9060A4586F9E32364ECB /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		4B8431633D1EEB0249983BE8 /* thumbnails.rs */ = {isa = PBXFileReference; path = thumbnails.rs; sourceTree = "<group>"; };
+		598F2B687FF3A35423F13A99 /* folder_import.rs */ = {isa = PBXFileReference; path = folder_import.rs; sourceTree = "<group>"; };
 		5C8A8EB351D6168E7922D347 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		6ACF68A3B879A0AAF54F6C8B /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
 		703BC17B68E062AD19872295 /* tag.rs */ = {isa = PBXFileReference; path = tag.rs; sourceTree = "<group>"; };
@@ -52,6 +57,7 @@
 		8CCD4EDB70770DA7DF0FD632 /* ai-file-manager_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "ai-file-manager_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9D2F1FF6A1233DE5D64ED2E3 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
 		A420CD8F7DF83BFB2C25764F /* macos.rs */ = {isa = PBXFileReference; path = macos.rs; sourceTree = "<group>"; };
+		A72CA06C0440FEC406F8CD63 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		A81BB9FDBAA6DCAE034BA779 /* tags.rs */ = {isa = PBXFileReference; path = tags.rs; sourceTree = "<group>"; };
 		AB81933B0331ED179486DD9B /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
 		B317E7559A0FBEA0585689C4 /* files.rs */ = {isa = PBXFileReference; path = files.rs; sourceTree = "<group>"; };
@@ -66,7 +72,7 @@
 		E3C06A55E0131506DBA9544D /* metadata.rs */ = {isa = PBXFileReference; path = metadata.rs; sourceTree = "<group>"; };
 		EB73DD43ED8037575079890E /* thumbnailer.rs */ = {isa = PBXFileReference; path = thumbnailer.rs; sourceTree = "<group>"; };
 		F11501BC1D14F876BA22859C /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
-		F2A670826166FF572DCCDDE4 /* android.rs */ = {isa = PBXFileReference; path = android.rs; sourceTree = "<group>"; };
+		678752D3022A9AC15CE0C014 /* SwiftLinkStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLinkStub.swift; sourceTree = "<group>"; };
 		FDB54649E64F5294E5C8A18B /* windows.rs */ = {isa = PBXFileReference; path = windows.rs; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -97,6 +103,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		156BE194E3C17E55101AB0B3 /* release */ = {
+			isa = PBXGroup;
+			children = (
+				A72CA06C0440FEC406F8CD63 /* libapp.a */,
+			);
+			path = release;
+			sourceTree = "<group>";
+		};
 		1DC6E4A19078B0C446C43327 /* db */ = {
 			isa = PBXGroup;
 			children = (
@@ -112,7 +126,6 @@
 			isa = PBXGroup;
 			children = (
 				CF3EEBF83686E4F33889203A /* CoreGraphics.framework */,
-				42EC9060A4586F9E32364ECB /* libapp.a */,
 				880C0620C7EF516730AA7B1D /* Metal.framework */,
 				F11501BC1D14F876BA22859C /* MetalKit.framework */,
 				70473567770B108213A920E8 /* QuartzCore.framework */,
@@ -156,6 +169,7 @@
 			isa = PBXGroup;
 			children = (
 				D1D4B016CC03FEB61DF40448 /* main.mm */,
+				678752D3022A9AC15CE0C014 /* SwiftLinkStub.swift */,
 				A94E06D2A878AE43FC15AB79 /* bindings */,
 			);
 			path = "ai-file-manager";
@@ -164,6 +178,7 @@
 		8A88AF569081936667D529B7 /* Externals */ = {
 			isa = PBXGroup;
 			children = (
+				AF0E12063A1310DF48FCB097 /* arm64 */,
 			);
 			path = Externals;
 			sourceTree = "<group>";
@@ -177,6 +192,7 @@
 				1DC6E4A19078B0C446C43327 /* db */,
 				A7C18C4B656B533C9032191E /* models */,
 				ACA14ACB7F8878CFD025227D /* platform */,
+				D29D928F890087BBDD1C0809 /* plugins */,
 				EE9E0E7742C0B80C7D8909B1 /* services */,
 			);
 			name = src;
@@ -221,11 +237,20 @@
 			isa = PBXGroup;
 			children = (
 				F2A670826166FF572DCCDDE4 /* android.rs */,
+				007CB4C8E5FC888CC3916653 /* ios.rs */,
 				A420CD8F7DF83BFB2C25764F /* macos.rs */,
 				AB81933B0331ED179486DD9B /* mod.rs */,
 				FDB54649E64F5294E5C8A18B /* windows.rs */,
 			);
 			path = platform;
+			sourceTree = "<group>";
+		};
+		AF0E12063A1310DF48FCB097 /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+				156BE194E3C17E55101AB0B3 /* release */,
+			);
+			path = arm64;
 			sourceTree = "<group>";
 		};
 		B1A50627D7E0ABED777FC794 /* commands */ = {
@@ -241,17 +266,34 @@
 			path = commands;
 			sourceTree = "<group>";
 		};
+		D29D928F890087BBDD1C0809 /* plugins */ = {
+			isa = PBXGroup;
+			children = (
+				598F2B687FF3A35423F13A99 /* folder_import.rs */,
+				39EBD8CAB970EEAD569F3073 /* mod.rs */,
+			);
+			path = plugins;
+			sourceTree = "<group>";
+		};
 		EE9E0E7742C0B80C7D8909B1 /* services */ = {
 			isa = PBXGroup;
 			children = (
 				79DAB3C61E6EB9F0951C1BC0 /* file_ops.rs */,
 				1E6B4DF33C645835A6C35BCA /* file_scanner.rs */,
 				7583271868C13D0F7474B74C /* hash.rs */,
+				0488607529CF28F0015F882A /* import_service.rs */,
 				05355991BDC0DDD42FB4523B /* metadata_extractor.rs */,
 				87830ECB827698F83C751D06 /* mod.rs */,
 				EB73DD43ED8037575079890E /* thumbnailer.rs */,
 			);
 			path = services;
+			sourceTree = "<group>";
+		};
+		"TEMP_3EC47F40-3748-4E97-B096-88BF6B46A421" /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = x86_64;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -315,6 +357,7 @@
 				A9FE11F352B12C82EB3D2720 /* Assets.xcassets in Resources */,
 				D3F65386CF066F440D43DB53 /* LaunchScreen.storyboard in Resources */,
 				2F99AC4481B00ACC9112B5FB /* assets in Resources */,
+				996F4B633D6F320EB66611B2 /* libapp.a in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,7 +383,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} 0 ${ARCHS:?}";
+			shellScript = "npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -349,6 +392,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				14C3CD3236403AB393013819 /* SwiftLinkStub.swift in Sources */,
 				DF5CCBBFE07F5E60CD6CE702 /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -371,11 +415,15 @@
 					"\".\"",
 				);
 				INFOPLIST_FILE = "ai-file-manager_iOS/Info.plist";
-				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
-				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Externals/arm64/$(CONFIGURATION)",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ryotaro.ai-file-manager;
 				PRODUCT_NAME = "AI File Manager";
+				SWIFT_VERSION = 5.0;
 				VALID_ARCHS = arm64;
+				DEVELOPMENT_TEAM = "27838MP3P7";
 			};
 			name = release;
 		};
@@ -402,11 +450,15 @@
 					"\".\"",
 				);
 				INFOPLIST_FILE = "ai-file-manager_iOS/Info.plist";
-				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
-				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Externals/arm64/$(CONFIGURATION)",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.ryotaro.ai-file-manager;
 				PRODUCT_NAME = "AI File Manager";
+				SWIFT_VERSION = 5.0;
 				VALID_ARCHS = arm64;
+				DEVELOPMENT_TEAM = "27838MP3P7";
 			};
 			name = debug;
 		};

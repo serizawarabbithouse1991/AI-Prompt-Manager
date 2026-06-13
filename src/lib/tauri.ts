@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AIGenerationMetadata, UpdateMetadataPayload } from "@/features/metadata/types";
 import type { Tag } from "@/features/tags/types";
-import type { FileEntry, ScanResult, SpecialPaths } from "@/features/files/types";
+import type { FileEntry, ImportResult, ScanResult, SpecialPaths } from "@/features/files/types";
 
 export async function listDirectory(path: string): Promise<FileEntry[]> {
   return invoke<FileEntry[]>("list_directory", { path });
@@ -17,6 +17,14 @@ export async function scanFolder(path: string, recursive: boolean): Promise<Scan
 
 export async function listAiLibrary(): Promise<FileEntry[]> {
   return invoke<FileEntry[]>("list_ai_library");
+}
+
+export async function importPaths(paths: string[]): Promise<ImportResult> {
+  return invoke<ImportResult>("import_paths", { paths });
+}
+
+export async function pickImportFolder(): Promise<string | null> {
+  return invoke<string | null>("pick_import_folder");
 }
 
 export async function importFromSaf(uri: string): Promise<FileEntry> {

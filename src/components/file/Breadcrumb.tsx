@@ -21,6 +21,10 @@ export function Breadcrumb() {
     return <div className="px-4 py-2 text-xs text-neutral-400">AI Library</div>;
   }
 
+  if (viewMode === "settings") {
+    return <div className="px-4 py-2 text-xs text-neutral-400">設定</div>;
+  }
+
   return (
     <div className="truncate px-4 py-2 text-xs text-neutral-400">{currentPath}</div>
   );

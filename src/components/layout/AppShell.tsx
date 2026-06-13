@@ -3,8 +3,12 @@ import { Sidebar, BottomNav } from "@/components/layout/Sidebar";
 import { Inspector } from "@/components/layout/Inspector";
 import { FileGrid } from "@/components/file/FileGrid";
 import { Breadcrumb } from "@/components/file/Breadcrumb";
+import { SettingsPanel } from "@/components/settings/SettingsPanel";
+import { useFileStore } from "@/features/files/store";
 
 export function AppShell() {
+  const viewMode = useFileStore((s) => s.viewMode);
+
   return (
     <div className="grid h-screen grid-rows-[48px_1fr_auto] bg-neutral-950 text-neutral-100 lg:grid-rows-[48px_1fr]">
       <Toolbar />
@@ -12,11 +16,9 @@ export function AppShell() {
         <Sidebar />
         <main className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <Breadcrumb />
-          <FileGrid />
+          {viewMode === "settings" ? <SettingsPanel /> : <FileGrid />}
         </main>
-        <div className="hidden min-h-0 h-full overflow-hidden lg:block">
-          <Inspector />
-        </div>
+        <Inspector />
       </div>
       <BottomNav />
     </div>

@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod models;
 mod platform;
+mod plugins;
 mod services;
 
 use tauri::Manager;
@@ -11,6 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(plugins::folder_import::init())
         .setup(|app| {
             db::connection::init_db(app.handle())?;
             Ok(())
@@ -23,6 +25,8 @@ pub fn run() {
             commands::files::list_ai_library,
             commands::files::list_favorites,
             commands::files::import_from_saf,
+            commands::files::import_paths,
+            plugins::folder_import::pick_import_folder,
             commands::files::rename_file,
             commands::files::trash_file,
             commands::files::reveal_in_file_manager,

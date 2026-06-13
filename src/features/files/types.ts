@@ -45,4 +45,11 @@ export type ScanResult = {
   errorCount: number;
 };
 
-export type ViewMode = "browse" | "search" | "favorites" | "ai-library";
+export type ImportResult = {
+  importedCount: number;
+  imageCount: number;
+  zipCount: number;
+  errorCount: number;
+};
+
+export type ViewMode = "browse" | "search" | "favorites" | "ai-library" | "settings";

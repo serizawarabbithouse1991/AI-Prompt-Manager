@@ -11,6 +11,7 @@ const DESKTOP_ITEMS = [
 const COMMON_ITEMS = [
   { id: "ai-library", label: "AI Library", mode: "ai-library" as const },
   { id: "favorites", label: "Favorites", mode: "favorites" as const },
+  { id: "settings", label: "Settings", mode: "settings" as const },
 ];
 
 export function Sidebar() {
@@ -73,7 +74,7 @@ export function BottomNav() {
   const items = [
     { id: "ai-library", label: "Library", mode: "ai-library" as const },
     { id: "favorites", label: "Fav", mode: "favorites" as const },
-    { id: "browse", label: "Browse", mode: "browse" as const },
+    { id: "settings", label: "設定", mode: "settings" as const },
   ];
 
   return (
