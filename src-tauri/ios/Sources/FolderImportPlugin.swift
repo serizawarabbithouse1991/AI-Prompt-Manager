@@ -3,48 +3,85 @@ import Tauri
 import UIKit
 import UniformTypeIdentifiers
 
-private class FolderPickerDelegate: NSObject, UIDocumentPickerDelegate {
+private class ImportPickerDelegate: NSObject, UIDocumentPickerDelegate {
   private let invoke: Invoke
+  private let multiple: Bool
 
-  init(invoke: Invoke) {
+  init(invoke: Invoke, multiple: Bool) {
     self.invoke = invoke
+    self.multiple = multiple
   }
 
   func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-    guard let source = urls.first else {
-      invoke.resolve(["path": NSNull()])
+    guard !urls.isEmpty else {
+      resolveEmpty()
       return
     }
 
-    let didAccess = source.startAccessingSecurityScopedResource()
-    defer {
-      if didAccess {
-        source.stopAccessingSecurityScopedResource()
+    var stagedPaths: [String] = []
+    for url in urls {
+      let didAccess = url.startAccessingSecurityScopedResource()
+      defer {
+        if didAccess {
+          url.stopAccessingSecurityScopedResource()
+        }
+      }
+
+      do {
+        stagedPaths.append(try FolderImportPlugin.stageItemForImport(from: url))
+      } catch {
+        invoke.reject("Failed to stage item: \(error.localizedDescription)")
+        return
       }
     }
 
-    do {
-      let stagedPath = try FolderImportPlugin.stageFolderForImport(from: source)
-      invoke.resolve(["path": stagedPath])
-    } catch {
-      invoke.reject("Failed to stage folder: \(error.localizedDescription)")
+    if multiple {
+      invoke.resolve(["paths": stagedPaths])
+    } else {
+      invoke.resolve(["path": stagedPaths.first ?? NSNull()])
     }
   }
 
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-    invoke.resolve(["path": NSNull()])
+    resolveEmpty()
+  }
+
+  private func resolveEmpty() {
+    if multiple {
+      invoke.resolve(["paths": NSNull()])
+    } else {
+      invoke.resolve(["path": NSNull()])
+    }
   }
 }
 
 @available(iOS 14.0, *)
 class FolderImportPlugin: Plugin {
-  private var pickerDelegate: FolderPickerDelegate?
+  private var pickerDelegate: ImportPickerDelegate?
 
   override init() {
     super.init()
   }
 
+  private static let importContentTypes: [UTType] = [
+    .folder,
+    .image,
+    .png,
+    .jpeg,
+    .gif,
+    .webP,
+    .zip,
+  ]
+
   @objc public func pickFolder(_ invoke: Invoke) {
+    presentImportPicker(invoke: invoke, allowsMultipleSelection: false)
+  }
+
+  @objc public func pickItems(_ invoke: Invoke) {
+    presentImportPicker(invoke: invoke, allowsMultipleSelection: true)
+  }
+
+  private func presentImportPicker(invoke: Invoke, allowsMultipleSelection: Bool) {
     DispatchQueue.main.async {
       guard let presenter = self.manager.viewController else {
         invoke.reject("View controller unavailable")
@@ -52,11 +89,11 @@ class FolderImportPlugin: Plugin {
       }
 
       let picker = UIDocumentPickerViewController(
-        forOpeningContentTypes: [UTType.folder],
+        forOpeningContentTypes: Self.importContentTypes,
         asCopy: false
       )
-      picker.allowsMultipleSelection = false
-      let delegate = FolderPickerDelegate(invoke: invoke)
+      picker.allowsMultipleSelection = allowsMultipleSelection
+      let delegate = ImportPickerDelegate(invoke: invoke, multiple: allowsMultipleSelection)
       self.pickerDelegate = delegate
       picker.delegate = delegate
       picker.modalPresentationStyle = .fullScreen
@@ -64,7 +101,7 @@ class FolderImportPlugin: Plugin {
     }
   }
 
-  static func stageFolderForImport(from source: URL) throws -> String {
+  static func stageItemForImport(from source: URL) throws -> String {
     let fileManager = FileManager.default
     let stagingRoot = fileManager.temporaryDirectory.appendingPathComponent(
       "folder-import-\(UUID().uuidString)",
@@ -73,15 +110,18 @@ class FolderImportPlugin: Plugin {
     try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
 
     var isDirectory: ObjCBool = false
-    guard fileManager.fileExists(atPath: source.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+    guard fileManager.fileExists(atPath: source.path, isDirectory: &isDirectory) else {
       throw NSError(
         domain: "FolderImportPlugin",
         code: 1,
-        userInfo: [NSLocalizedDescriptionKey: "Selected item is not a folder"]
+        userInfo: [NSLocalizedDescriptionKey: "Selected item does not exist"]
       )
     }
 
-    let destination = stagingRoot.appendingPathComponent(source.lastPathComponent, isDirectory: true)
+    let destination = stagingRoot.appendingPathComponent(
+      source.lastPathComponent,
+      isDirectory: isDirectory.boolValue
+    )
     try fileManager.copyItem(at: source, to: destination)
     return destination.path
   }

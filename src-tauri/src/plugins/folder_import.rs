@@ -15,6 +15,11 @@ struct PickFolderResponse {
     path: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct PickItemsResponse {
+    paths: Option<Vec<String>>,
+}
+
 #[cfg(target_os = "ios")]
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("folder-import")
@@ -47,5 +52,29 @@ pub async fn pick_import_folder<R: Runtime>(app: AppHandle<R>) -> Result<Option<
     {
         let _ = app;
         Err("Folder picker is only supported on iOS".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn pick_import_items<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let plugin = app.state::<FolderImportPlugin<R>>();
+        let response: PickItemsResponse = plugin
+            .0
+            .run_mobile_plugin("pickItems", ())
+            .map_err(|e| e.to_string())?;
+        Ok(response
+            .paths
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|path| !path.is_empty())
+            .collect())
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Err("Import picker is only supported on iOS".to_string())
     }
 }

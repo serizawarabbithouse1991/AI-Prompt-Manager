@@ -1,21 +1,22 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
-import { importPaths, pickImportFolder } from "@/lib/tauri";
+import { importPaths, pickImportItems } from "@/lib/tauri";
 import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
+
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 
 const IMAGE_AND_ZIP_FILTERS = [
   {
     name: "Images & ZIP",
-    extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "zip"],
+    extensions: [...IMAGE_EXTENSIONS, "zip"],
   },
 ];
 
-const DOCUMENT_PICKER_OPTIONS = {
+const PHOTO_LIBRARY_OPTIONS = {
   multiple: true,
-  pickerMode: "document" as const,
-  fileAccessMode: "copy" as const,
-  filters: IMAGE_AND_ZIP_FILTERS,
+  pickerMode: "image" as const,
+  filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
 };
 
 export function SettingsPanel() {
@@ -48,23 +49,34 @@ export function SettingsPanel() {
     }
   }
 
-  async function handleImportFiles() {
-    const selected = await open(
-      isMobile ? DOCUMENT_PICKER_OPTIONS : { multiple: true, filters: IMAGE_AND_ZIP_FILTERS },
-    );
-    if (!selected) return;
-    const paths = Array.isArray(selected) ? selected : [selected];
-    await runImport(paths, "iCloud/ファイルからインポート");
+  function normalizeSelectedPaths(
+    selected: string | string[] | { path: string } | Array<{ path: string }> | null,
+  ): string[] {
+    if (!selected) return [];
+    if (typeof selected === "string") return [selected];
+    if (Array.isArray(selected)) {
+      return selected.map((item) => (typeof item === "string" ? item : item.path));
+    }
+    return [selected.path];
   }
 
-  async function handleImportFolder() {
+  async function handleImportFromICloud() {
     if (isMobile) {
-      const path = await pickImportFolder();
-      if (!path) return;
-      await runImport([path], "フォルダからインポート");
+      const paths = await pickImportItems();
+      await runImport(paths, "iCloud/ファイル・フォルダからインポート");
       return;
     }
 
+    const selected = await open({ multiple: true, filters: IMAGE_AND_ZIP_FILTERS });
+    await runImport(normalizeSelectedPaths(selected), "iCloud/ファイルからインポート");
+  }
+
+  async function handleImportFromPhotoLibrary() {
+    const selected = await open(PHOTO_LIBRARY_OPTIONS);
+    await runImport(normalizeSelectedPaths(selected), "写真ライブラリからインポート");
+  }
+
+  async function handleImportFolder() {
     const selected = await open({ directory: true, multiple: false, recursive: true });
     if (typeof selected !== "string") return;
     await runImport([selected], "フォルダからインポート");
@@ -76,24 +88,35 @@ export function SettingsPanel() {
         <div>
           <h1 className="text-lg font-medium">設定</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            iCloud Drive や Files アプリ内の画像・ZIP を AI Library に取り込みます。
+            iCloud Drive・写真ライブラリ・画像フォルダから AI Library に取り込みます。
           </p>
         </div>
 
         <section className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
-          <h2 className="text-sm font-medium">iCloud / ファイルからインポート</h2>
+          <h2 className="text-sm font-medium">インポート</h2>
           <p className="text-xs text-neutral-500">
             {isMobile
-              ? "フォルダ選択では iCloud Drive 上のフォルダ（NovelAI など）を選べます。ZIP 内の画像も自動展開します。"
-              : "ファイルピッカーで iCloud Drive 内のフォルダ・ZIP・画像を選べます。"}
+              ? "iCloud では画像ファイル・ZIP・画像フォルダをまとめて選べます。写真アプリのアルバムからも読み込めます。"
+              : "ファイルピッカーで iCloud Drive 内の画像・ZIP、またはフォルダを選べます。"}
           </p>
           <div className="flex flex-col gap-2">
-            <button type="button" onClick={() => void handleImportFiles()} className="action-btn">
-              画像・ZIP を選択
+            <button type="button" onClick={() => void handleImportFromICloud()} className="action-btn">
+              {isMobile ? "iCloud / ファイル・フォルダを選択" : "画像・ZIP を選択"}
             </button>
-            <button type="button" onClick={() => void handleImportFolder()} className="action-btn">
-              フォルダを選択（iCloud 含む）
-            </button>
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => void handleImportFromPhotoLibrary()}
+                className="action-btn"
+              >
+                写真ライブラリから選択
+              </button>
+            )}
+            {isDesktop && (
+              <button type="button" onClick={() => void handleImportFolder()} className="action-btn">
+                フォルダを選択（iCloud 含む）
+              </button>
+            )}
           </div>
         </section>
 

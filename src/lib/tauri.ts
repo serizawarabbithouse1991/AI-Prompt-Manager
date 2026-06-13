@@ -27,6 +27,10 @@ export async function pickImportFolder(): Promise<string | null> {
   return invoke<string | null>("pick_import_folder");
 }
 
+export async function pickImportItems(): Promise<string[]> {
+  return invoke<string[]>("pick_import_items");
+}
+
 export async function importFromSaf(uri: string): Promise<FileEntry> {
   return invoke<FileEntry>("import_from_saf", { uri });
 }
