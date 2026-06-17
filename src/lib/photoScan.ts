@@ -17,7 +17,7 @@ function formatNovelAiImportSummary(result: ImportResult): string {
   if (errors > 0) extras.push(`エラー ${errors}`);
 
   const suffix = extras.length > 0 ? `（${extras.join("、")} 件）` : "";
-  return `NovelAI ${novelai} 件を取り込みました${suffix}`;
+  return `NovelAI ${novelai} 件を取り込みました${suffix}${formatAssignSuffix(result)}`;
 }
 
 export function formatPhotoScanResult(result: ImportResult): string {
@@ -26,6 +26,12 @@ export function formatPhotoScanResult(result: ImportResult): string {
 
 export function formatNovelAiImportResult(result: ImportResult): string {
   return formatNovelAiImportSummary(result);
+}
+
+export function formatAssignSuffix(result: ImportResult): string {
+  const assigned = result.assignedCollectionCount ?? 0;
+  if (assigned <= 0) return "";
+  return `、${assigned} 件をコレクションに振り分け`;
 }
 
 export async function runPhotoLibraryScan(

@@ -12,9 +12,13 @@ import {
   reconcileAiLibrary,
   backfillContentHashes,
   backupDatabase,
+  getDanbooruIndexStatus,
+  rebuildDanbooruCharacterCache,
+  importDanbooruDbFile,
+  type DanbooruIndexStatus,
   type StorageDiagnostics,
 } from "@/lib/tauri";
-import { formatNovelAiImportResult, formatPhotoScanResult, runPhotoLibraryScan } from "@/lib/photoScan";
+import { formatNovelAiImportResult, formatPhotoScanResult, formatAssignSuffix, runPhotoLibraryScan } from "@/lib/photoScan";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
 import {
@@ -49,7 +53,7 @@ function formatImportResult(result: ImportResult, novelaiOnly: boolean): string 
   }
   const duplicates = result.duplicateCount ?? 0;
   const duplicateText = duplicates > 0 ? `, 重複 ${duplicates} 件` : "";
-  return `完了: 画像 ${result.imageCount} 件, ZIP ${result.zipCount} 件, エラー ${result.errorCount} 件${duplicateText}`;
+  return `完了: 画像 ${result.imageCount} 件, ZIP ${result.zipCount} 件, エラー ${result.errorCount} 件${duplicateText}${formatAssignSuffix(result)}`;
 }
 
 export function SettingsPanel() {
@@ -64,6 +68,8 @@ export function SettingsPanel() {
   const [autoPhotoScan, setAutoPhotoScan] = useState(loadAutoPhotoScanEnabled);
   const [pngOnlyScan, setPngOnlyScan] = useState(true);
   const [storageDiagnostics, setStorageDiagnostics] = useState<StorageDiagnostics | null>(null);
+  const [danbooruStatus, setDanbooruStatus] = useState<DanbooruIndexStatus | null>(null);
+  const [danbooruRebuilding, setDanbooruRebuilding] = useState(false);
 
   const isDesktop = isDesktopPlatform(platformName);
   const isMobile = isMobilePlatform(platformName);
@@ -81,6 +87,57 @@ export function SettingsPanel() {
       setStorageDiagnostics(diagnostics);
     } catch (e) {
       setLastResult(String(e));
+    }
+  }
+
+  async function refreshDanbooruStatus() {
+    try {
+      const status = await getDanbooruIndexStatus();
+      setDanbooruStatus(status);
+    } catch (e) {
+      setDanbooruStatus(null);
+      setLastResult(String(e));
+    }
+  }
+
+  useEffect(() => {
+    void refreshDanbooruStatus();
+  }, []);
+
+  async function handleRebuildDanbooruCache() {
+    setDanbooruRebuilding(true);
+    try {
+      const result = await rebuildDanbooruCharacterCache();
+      await refreshDanbooruStatus();
+      setLastResult(`Danbooru 辞書: ${result.cacheCount.toLocaleString()} キャラタグを読み込みました`);
+      toast(`キャラ辞書を更新しました（${result.cacheCount.toLocaleString()} 件）`, "success");
+    } catch (e) {
+      setLastResult(String(e));
+      toast(String(e), "error");
+    } finally {
+      setDanbooruRebuilding(false);
+    }
+  }
+
+  async function handleImportDanbooruDb() {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "SQLite DB", extensions: ["db"] }],
+    });
+    const paths = normalizeSelectedPaths(selected);
+    if (paths.length === 0) return;
+
+    setDanbooruRebuilding(true);
+    try {
+      const result = await importDanbooruDbFile(paths[0]);
+      await refreshDanbooruStatus();
+      setLastResult(`Danbooru DB をインポート: ${result.cacheCount.toLocaleString()} キャラタグ`);
+      toast(`辞書をインポートしました（${result.cacheCount.toLocaleString()} 件）`, "success");
+    } catch (e) {
+      setLastResult(String(e));
+      toast(String(e), "error");
+    } finally {
+      setDanbooruRebuilding(false);
     }
   }
 
@@ -416,6 +473,65 @@ export function SettingsPanel() {
                 SAF 単一ファイルインポート
               </button>
             )}
+          </div>
+        </section>
+
+        <section className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
+          <h2 className="text-sm font-medium">キャラクター辞書（Danbooru）</h2>
+          <p className="text-xs text-neutral-500">
+            danbooru2023.db からキャラクタータグを読み込み、プロンプトに含まれるキャラごとにコレクションへ自動振り分けします。
+            {isDesktop
+              ? " デフォルトは iCloud の NovelAI フォルダ内の danbooru2023.db です。"
+              : " iOS では DB ファイルをアプリへインポートしてください。"}
+          </p>
+          {danbooruStatus ? (
+            <dl className="space-y-1 text-xs text-neutral-400">
+              <div className="flex justify-between gap-4">
+                <dt>DB</dt>
+                <dd className="max-w-[60%] truncate text-right">
+                  {danbooruStatus.dbExists ? danbooruStatus.dbPath ?? "検出済み" : "未検出"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt>キャッシュ</dt>
+                <dd>
+                  {danbooruStatus.cacheReady
+                    ? `${danbooruStatus.cacheCount.toLocaleString()} タグ`
+                    : "未構築"}
+                </dd>
+              </div>
+              {danbooruStatus.cacheBuiltAt && (
+                <div className="flex justify-between gap-4">
+                  <dt>最終更新</dt>
+                  <dd>{new Date(danbooruStatus.cacheBuiltAt).toLocaleString()}</dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <p className="text-xs text-neutral-500">読み込み中…</p>
+          )}
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              disabled={danbooruRebuilding}
+              onClick={() => void handleRebuildDanbooruCache()}
+              className="action-btn disabled:opacity-50"
+            >
+              {danbooruRebuilding ? "辞書を更新中…" : "辞書を更新"}
+            </button>
+            {(isIOS || isAndroid) && (
+              <button
+                type="button"
+                disabled={danbooruRebuilding}
+                onClick={() => void handleImportDanbooruDb()}
+                className="action-btn disabled:opacity-50"
+              >
+                danbooru2023.db をインポート
+              </button>
+            )}
+            <button type="button" onClick={() => void refreshDanbooruStatus()} className="action-btn">
+              状態を更新
+            </button>
           </div>
         </section>
 

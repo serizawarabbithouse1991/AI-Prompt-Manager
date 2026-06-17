@@ -57,6 +57,7 @@ export type ImportResult = {
   skippedCount?: number;
   novelaiCount?: number;
   duplicateCount?: number;
+  assignedCollectionCount?: number;
 };
 
 export type ImportProgress = {
@@ -84,6 +85,9 @@ export type FileFilter = "all" | "images" | "favorites" | "tag";
 export type LayoutMode = "grid" | "list";
 export type SearchScope = "global" | "folder";
 
+/** グリッド密度プリセット（列数は gridUtils で解決） */
+export type GridDensity = "xs" | "sm" | "md" | "lg" | "xl";
+
 export type Bookmark = {
   id: string;
   label: string;
@@ -103,6 +107,37 @@ export type Collection = {
   kind: string;
   createdAt?: string | null;
   fileCount: number;
+  matchKeywords?: string[];
+};
+
+export type SmartCollection = Collection & {
+  kind: "smart_character";
+  matchKeywords: string[];
+};
+
+export type CharacterSuggestion = {
+  tag: string;
+  hitCount: number;
+  lastSeenAt?: string | null;
+};
+
+export type BatchAssignResult = {
+  filesProcessed: number;
+  assignmentsAdded: number;
+  suggestionsUpdated: number;
+};
+
+export type DanbooruIndexStatus = {
+  dbPath?: string | null;
+  dbExists: boolean;
+  cacheCount: number;
+  cacheBuiltAt?: string | null;
+  cacheReady: boolean;
+};
+
+export type RebuildDanbooruCacheResult = {
+  cacheCount: number;
+  dbPath: string;
 };
 
 export type SearchFilters = {

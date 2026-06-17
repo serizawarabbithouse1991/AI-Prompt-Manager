@@ -3,13 +3,17 @@ import type { AIGenerationMetadata, UpdateMetadataPayload } from "@/features/met
 import type { Tag } from "@/features/tags/types";
 import type {
   BackfillResult,
+  BatchAssignResult,
+  CharacterSuggestion,
   Collection,
+  DanbooruIndexStatus,
   FileEntry,
   ImportProgress,
   ImportResult,
   ScanResult,
   SearchFilters,
   SpecialPaths,
+  RebuildDanbooruCacheResult,
 } from "@/features/files/types";
 
 export type FileRef = {
@@ -230,6 +234,53 @@ export async function createCollection(name: string, description?: string): Prom
   return invoke<Collection>("create_collection", { payload: { name, description: description ?? null } });
 }
 
+export async function createSmartCollection(
+  name: string,
+  matchKeywords: string[],
+  description?: string,
+): Promise<Collection> {
+  return invoke<Collection>("create_smart_collection", {
+    payload: { name, description: description ?? null, matchKeywords },
+  });
+}
+
+export async function updateCollectionKeywords(
+  collectionId: string,
+  matchKeywords: string[],
+): Promise<void> {
+  return invoke("update_collection_keywords", {
+    payload: { collectionId, matchKeywords },
+  });
+}
+
+export async function batchAssignSmartCollections(): Promise<BatchAssignResult> {
+  return invoke<BatchAssignResult>("batch_assign_smart_collections");
+}
+
+export async function listCharacterSuggestions(limit = 50): Promise<CharacterSuggestion[]> {
+  return invoke<CharacterSuggestion[]>("list_character_suggestions", { limit });
+}
+
+export async function dismissCharacterSuggestion(tag: string): Promise<void> {
+  return invoke("dismiss_character_suggestion", { tag });
+}
+
+export async function getDanbooruIndexStatus(): Promise<DanbooruIndexStatus> {
+  return invoke<DanbooruIndexStatus>("get_danbooru_index_status");
+}
+
+export async function setDanbooruDbPath(path: string): Promise<void> {
+  return invoke("set_danbooru_db_path", { path });
+}
+
+export async function rebuildDanbooruCharacterCache(): Promise<RebuildDanbooruCacheResult> {
+  return invoke<RebuildDanbooruCacheResult>("rebuild_danbooru_character_cache");
+}
+
+export async function importDanbooruDbFile(sourcePath: string): Promise<RebuildDanbooruCacheResult> {
+  return invoke<RebuildDanbooruCacheResult>("import_danbooru_db_file", { sourcePath });
+}
+
 export async function deleteCollection(collectionId: string): Promise<void> {
   return invoke("delete_collection", { collectionId });
 }
@@ -258,4 +309,4 @@ export async function backupDatabase(): Promise<string> {
   return invoke<string>("backup_database");
 }
 
-export type { Collection, SearchFilters, BackfillResult };
+export type { Collection, SearchFilters, BackfillResult, CharacterSuggestion, BatchAssignResult, DanbooruIndexStatus, RebuildDanbooruCacheResult };

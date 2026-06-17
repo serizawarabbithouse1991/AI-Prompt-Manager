@@ -64,6 +64,8 @@ pub struct ImportResult {
     pub novelai_count: u32,
     #[serde(default)]
     pub duplicate_count: u32,
+    #[serde(default)]
+    pub assigned_collection_count: u32,
 }
 
 pub fn detect_file_kind(extension: &str, is_directory: bool) -> String {

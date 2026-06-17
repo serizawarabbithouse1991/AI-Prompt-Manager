@@ -1,3 +1,5 @@
+pub mod character_matcher;
+pub mod danbooru_index;
 pub mod file_ops;
 pub mod file_scanner;
 pub mod hash;

@@ -106,7 +106,41 @@ CREATE TABLE IF NOT EXISTS processed_photo_assets (
 const POST_MIGRATION_SQL: &str = r#"
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_metadata_file_id ON ai_generation_metadata(file_id);
 CREATE INDEX IF NOT EXISTS idx_files_content_hash ON files(content_hash) WHERE content_hash IS NOT NULL AND is_deleted = 0;
+
+CREATE TABLE IF NOT EXISTS character_suggestions (
+  tag TEXT PRIMARY KEY,
+  hit_count INTEGER DEFAULT 0,
+  last_seen_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS danbooru_character_tags (
+  name TEXT PRIMARY KEY,
+  normalized TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 "#;
+
+fn ensure_collections_match_keywords(conn: &rusqlite::Connection) -> Result<(), String> {
+    let has_column: bool = conn
+        .prepare("PRAGMA table_info(collections)")
+        .map_err(|e| e.to_string())?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .any(|name| name == "match_keywords");
+    if !has_column {
+        conn.execute(
+            "ALTER TABLE collections ADD COLUMN match_keywords TEXT",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 
 pub fn run_migrations(conn: &rusqlite::Connection) -> Result<(), String> {
     conn.execute_batch(MIGRATION_SQL)
@@ -114,6 +148,7 @@ pub fn run_migrations(conn: &rusqlite::Connection) -> Result<(), String> {
     crate::db::repositories::metadata::dedupe_by_file_id(conn)?;
     conn.execute_batch(POST_MIGRATION_SQL)
         .map_err(|e| e.to_string())?;
+    ensure_collections_match_keywords(conn)?;
     let _ = crate::db::repositories::fts::rebuild_fts_index(conn);
     Ok(())
 }

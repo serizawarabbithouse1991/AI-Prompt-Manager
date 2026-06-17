@@ -9,7 +9,7 @@ use zip::ZipArchive;
 
 use crate::db::repositories::{files as files_repo, metadata as metadata_repo};
 use crate::models::file::{detect_file_kind, ImportResult};
-use crate::services::{hash::file_content_hash, metadata_extractor, thumbnailer};
+use crate::services::{character_matcher, hash::file_content_hash, metadata_extractor, thumbnailer};
 
 enum ImportImageOutcome {
     Imported(crate::models::file::FileEntry),
@@ -205,11 +205,16 @@ fn import_file(
     }
 
     match import_image_file(conn, app_data, library_dir, path, novelai_only) {
-        Ok(ImportImageOutcome::Imported(_)) => {
+        Ok(ImportImageOutcome::Imported(entry)) => {
             result.imported_count += 1;
             result.image_count += 1;
             if novelai_only {
                 result.novelai_count += 1;
+            }
+            if let Ok(assign) =
+                character_matcher::assign_smart_collections_for_file(conn, app_data, &entry.id)
+            {
+                result.assigned_collection_count += assign.assigned_count;
             }
         }
         Ok(ImportImageOutcome::Skipped) => {
