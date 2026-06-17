@@ -16,11 +16,12 @@ import {
 } from "@/lib/tauri";
 import { shareFileEntry } from "@/lib/shareFile";
 import { open } from "@tauri-apps/plugin-dialog";
-import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
+import { isDesktopPlatform, isIOSPlatform, isMobilePlatform } from "@/lib/platform";
 import { confirmAction } from "@/lib/confirm";
 import { toast } from "@/lib/toast";
 import { addFileToCollection, listCollections } from "@/lib/tauri";
 import { IconStar } from "@/components/ui/Icons";
+import { IOSSheet } from "@/components/ios/IOSSheet";
 
 export function Inspector() {
   const selectedFile = useFileStore((s) => s.selectedFile);
@@ -47,6 +48,7 @@ export function Inspector() {
 
   const isDesktop = isDesktopPlatform(platformName);
   const isMobile = isMobilePlatform(platformName);
+  const isIOS = isIOSPlatform(platformName);
 
   if (!selectedFile) {
     return (
@@ -264,7 +266,7 @@ export function Inspector() {
           {content}
         </div>
       </aside>
-      {inspectorOpen && (
+      {inspectorOpen && !isIOS && (
         <div
           className="fixed inset-0 z-50 flex flex-col bg-neutral-950 animate-fade-in lg:hidden"
           style={{
@@ -287,6 +289,16 @@ export function Inspector() {
             {content}
           </div>
         </div>
+      )}
+      {inspectorOpen && isIOS && selectedFile && (
+        <IOSSheet
+          open
+          onClose={() => setInspectorOpen(false)}
+          title={selectedFile.displayName}
+          tall
+        >
+          {content}
+        </IOSSheet>
       )}
     </>
   );

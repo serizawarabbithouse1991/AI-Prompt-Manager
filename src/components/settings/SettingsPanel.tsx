@@ -37,6 +37,7 @@ import {
   isIOSPlatform,
   isMobilePlatform,
 } from "@/lib/platform";
+import { IOSGroupedList, IOSListRow, IOSSwitch } from "@/components/ios/IOSGroupedList";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 
@@ -62,7 +63,7 @@ function formatImportResult(result: ImportResult, novelaiOnly: boolean): string 
   return `完了: 画像 ${result.imageCount} 件, ZIP ${result.zipCount} 件, エラー ${result.errorCount} 件${duplicateText}${formatAssignSuffix(result)}`;
 }
 
-export function SettingsPanel() {
+export function SettingsPanel({ variant = "default" }: { variant?: "default" | "ios" }) {
   const platformName = useFileStore((s) => s.platformName);
   const setViewMode = useFileStore((s) => s.setViewMode);
   const setScanning = useFileStore((s) => s.setScanning);
@@ -85,6 +86,7 @@ export function SettingsPanel() {
   const isMobile = isMobilePlatform(platformName);
   const isIOS = isIOSPlatform(platformName);
   const isAndroid = isAndroidPlatform(platformName);
+  const isIOSVariant = variant === "ios";
 
   function handleAutoPhotoScanToggle(enabled: boolean) {
     setAutoPhotoScan(enabled);
@@ -456,6 +458,120 @@ export function SettingsPanel() {
     } finally {
       setScanning(false);
     }
+  }
+
+  if (isIOSVariant) {
+    return (
+      <div className="ios-settings space-y-6 px-4 py-2 pb-10">
+        <IOSGroupedList
+          title="インポート"
+          footer="写真ライブラリはオリジナルファイルを保持してインポートします。"
+        >
+          <IOSListRow label="iCloud / ファイル・フォルダを選択" onPress={() => void handleImportFromICloud()} />
+          <IOSListRow label="写真を選択してすべて取り込む" onPress={() => void handleImportAllFromPhotoLibrary()} />
+          <IOSListRow
+            label="写真を選択して NovelAI のみ取り込む"
+            onPress={() => void handleImportNovelAiFromPhotoLibrary()}
+          />
+          <IOSSwitch
+            label="起動時に新しい写真を自動スキャン"
+            checked={autoPhotoScan}
+            onChange={handleAutoPhotoScanToggle}
+          />
+          <IOSSwitch
+            label="PNG のみ高速スキャン"
+            checked={pngOnlyScan}
+            onChange={setPngOnlyScan}
+          />
+          <IOSListRow
+            label={libraryScanning ? "スキャン中…" : "写真ライブラリをスキャン（NovelAI のみ）"}
+            onPress={() => void handleScanPhotoLibraryNovelAi()}
+            disabled={libraryScanning}
+          />
+          {libraryScanning && (
+            <IOSListRow label="スキャンを中断" destructive onPress={() => void handleCancelLibraryScan()} />
+          )}
+        </IOSGroupedList>
+
+        <IOSGroupedList title="プロンプトからタグ付け">
+          <IOSListRow
+            label="全トークン"
+            onPress={() => void handlePromptTagModeChange("all")}
+            trailing={(promptTagSettings?.mode ?? "all") === "all" ? <span className="text-blue-400">✓</span> : null}
+          />
+          <IOSListRow
+            label="キャラクターのみ"
+            onPress={() => void handlePromptTagModeChange("character")}
+            trailing={promptTagSettings?.mode === "character" ? <span className="text-blue-400">✓</span> : null}
+          />
+          <IOSSwitch
+            label="取り込み時に自動でタグ付け"
+            checked={promptTagSettings?.autoTagOnImport ?? true}
+            onChange={(v) => void handleAutoTagOnImportToggle(v)}
+          />
+          <IOSListRow
+            label={batchTagRunning ? "タグ付け中…" : "ライブラリ全体にタグ付け"}
+            onPress={() => void handleBatchApplyPromptTags()}
+            disabled={batchTagRunning}
+          />
+        </IOSGroupedList>
+
+        <IOSGroupedList title="キャラクター辞書（Danbooru）">
+          {danbooruStatus && (
+            <IOSListRow
+              label="キャッシュ"
+              value={
+                danbooruStatus.cacheReady
+                  ? `${danbooruStatus.cacheCount.toLocaleString()} タグ`
+                  : "未構築"
+              }
+            />
+          )}
+          <IOSListRow
+            label={danbooruRebuilding ? "辞書を更新中…" : "辞書を更新"}
+            onPress={() => void handleRebuildDanbooruCache()}
+            disabled={danbooruRebuilding}
+          />
+          <IOSListRow
+            label="danbooru2023.db をインポート"
+            onPress={() => void handleImportDanbooruDb()}
+            disabled={danbooruRebuilding}
+          />
+          <IOSListRow label="状態を更新" onPress={() => void refreshDanbooruStatus()} />
+          <IOSListRow label="振り分け診断テスト" onPress={() => void handleDiagnose()} />
+        </IOSGroupedList>
+
+        {cacheProgress && (
+          <p className="px-2 text-xs text-neutral-400">
+            {cacheProgress.message}
+            {cacheProgress.count > 0 && ` (${cacheProgress.count.toLocaleString()} 件)`}
+          </p>
+        )}
+        {diagnosisText && (
+          <pre className="overflow-x-auto rounded-lg bg-neutral-900/50 p-3 text-xs text-neutral-400 whitespace-pre-wrap">
+            {diagnosisText}
+          </pre>
+        )}
+
+        <IOSGroupedList title="ストレージ">
+          {storageDiagnostics && (
+            <>
+              <IOSListRow label="ディスク上の画像" value={`${storageDiagnostics.diskFileCount} 件`} />
+              <IOSListRow label="DB 登録（Library）" value={`${storageDiagnostics.dbLibraryCount} 件`} />
+              <IOSListRow label="DB サイズ" value={`${Math.round(storageDiagnostics.databaseBytes / 1024)} KB`} />
+            </>
+          )}
+          <IOSListRow label="ストレージ情報を更新" onPress={() => void refreshStorageDiagnostics()} />
+          <IOSListRow label="ライブラリを再同期" onPress={() => void handleReconcileLibrary()} />
+          <IOSListRow label="content_hash をバックフィル" onPress={() => void handleBackfillHashes()} />
+          <IOSListRow label="データベースをバックアップ" onPress={() => void handleBackupDatabase()} />
+        </IOSGroupedList>
+
+        {lastResult && (
+          <p className="rounded-lg bg-neutral-900/50 px-3 py-2 text-xs text-neutral-400">{lastResult}</p>
+        )}
+      </div>
+    );
   }
 
   return (

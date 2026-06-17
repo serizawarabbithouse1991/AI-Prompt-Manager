@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDisplayFiles, useFileStore } from "@/features/files/store";
 import { IconChevronLeft, IconChevronRight, IconInfo } from "@/components/ui/Icons";
+import { isIOSPlatform } from "@/lib/platform";
 
 const SWIPE_THRESHOLD_PX = 50;
 
@@ -11,6 +12,8 @@ export function Lightbox() {
   const selectFile = useFileStore((s) => s.selectFile);
   const setInspectorOpen = useFileStore((s) => s.setInspectorOpen);
   const displayFiles = useDisplayFiles();
+  const platformName = useFileStore((s) => s.platformName);
+  const isIOS = isIOSPlatform(platformName);
   const swipeAreaRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const dragOffsetRef = useRef(0);
@@ -73,6 +76,13 @@ export function Lightbox() {
       const dx = touch.clientX - start.x;
       const dy = touch.clientY - start.y;
 
+      if (isIOS && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
+        e.preventDefault();
+        dragOffsetRef.current = dy;
+        setDragOffset(dy);
+        return;
+      }
+
       if (Math.abs(dx) <= Math.abs(dy)) return;
 
       e.preventDefault();
@@ -88,6 +98,11 @@ export function Lightbox() {
       touchStartRef.current = null;
       dragOffsetRef.current = 0;
       setDragOffset(0);
+
+      if (isIOS && offset > 80) {
+        setLightboxFileId(null);
+        return;
+      }
 
       if (offset <= -SWIPE_THRESHOLD_PX && currentIndex < images.length - 1) {
         setLightboxFileId(images[currentIndex + 1].id);
@@ -107,7 +122,7 @@ export function Lightbox() {
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [lightboxFileId, currentIndex, images, setLightboxFileId]);
+  }, [lightboxFileId, currentIndex, images, setLightboxFileId, isIOS]);
 
   if (!lightboxFileId || !current) return null;
 
@@ -129,7 +144,8 @@ export function Lightbox() {
   return (
     <div
       className={[
-        "fixed inset-0 z-50 flex touch-none items-center justify-center bg-black/90 transition-opacity duration-200",
+        "fixed inset-0 z-50 flex touch-none items-center justify-center transition-opacity duration-200",
+        isIOS ? "ios-lightbox z-[65] bg-black" : "z-50 bg-black/90",
         visible ? "opacity-100" : "opacity-0",
       ].join(" ")}
       style={{
@@ -140,27 +156,34 @@ export function Lightbox() {
       }}
       onClick={() => setLightboxFileId(null)}
     >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setLightboxFileId(null);
-        }}
-        className="absolute z-10 rounded bg-neutral-800 px-3 py-1 text-body hover:bg-neutral-700 focus-ring"
-        style={{
-          top: "calc(var(--safe-top) + 0.75rem)",
-          right: "calc(var(--safe-right) + 0.75rem)",
-        }}
-      >
-        閉じる
-      </button>
+      {!isIOS && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setLightboxFileId(null);
+          }}
+          className="absolute z-10 rounded bg-neutral-800 px-3 py-1 text-body hover:bg-neutral-700 focus-ring"
+          style={{
+            top: "calc(var(--safe-top) + 0.75rem)",
+            right: "calc(var(--safe-right) + 0.75rem)",
+          }}
+        >
+          閉じる
+        </button>
+      )}
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           openInspector();
         }}
-        className="absolute z-10 flex items-center gap-1 rounded bg-neutral-800 px-3 py-1.5 text-body hover:bg-neutral-700 focus-ring lg:hidden"
+        className={[
+          "absolute z-10 flex items-center gap-1 rounded px-3 py-1.5 text-body focus-ring",
+          isIOS
+            ? "ios-lightbox-info-btn bg-white/10 text-white backdrop-blur-sm"
+            : "bg-neutral-800 hover:bg-neutral-700 lg:hidden",
+        ].join(" ")}
         style={{
           top: "calc(var(--safe-top) + 0.75rem)",
           left: "calc(var(--safe-left) + 0.75rem)",
@@ -169,7 +192,7 @@ export function Lightbox() {
         <IconInfo className="h-4 w-4" />
         詳細
       </button>
-      {currentIndex > 0 && (
+      {currentIndex > 0 && !isIOS && (
         <button
           type="button"
           onClick={(e) => {
@@ -182,7 +205,7 @@ export function Lightbox() {
           <IconChevronLeft className="h-6 w-6" />
         </button>
       )}
-      {currentIndex < images.length - 1 && (
+      {currentIndex < images.length - 1 && !isIOS && (
         <button
           type="button"
           onClick={(e) => {
@@ -207,11 +230,17 @@ export function Lightbox() {
           draggable={false}
           style={{
             maxHeight: "calc(100dvh - var(--safe-top) - var(--safe-bottom) - 4.5rem)",
-            transform: dragOffset !== 0 ? `translateX(${dragOffset}px)` : undefined,
+            transform:
+              dragOffset !== 0
+                ? isIOS
+                  ? `translateY(${dragOffset}px)`
+                  : `translateX(${dragOffset}px)`
+                : undefined,
             transition: dragOffset === 0 ? "transform 0.2s ease-out" : undefined,
+            opacity: isIOS && dragOffset > 0 ? Math.max(0.3, 1 - dragOffset / 300) : undefined,
           }}
         />
-        {promptPreview && (
+        {promptPreview && !isIOS && (
           <button
             type="button"
             onClick={(e) => {
@@ -233,14 +262,25 @@ export function Lightbox() {
         )}
       </div>
       <div
-        className="pointer-events-none absolute left-1/2 max-w-[90vw] -translate-x-1/2 truncate text-center text-body text-neutral-300"
-        style={{ bottom: "calc(var(--safe-bottom) + 1rem)" }}
+        className={[
+          "pointer-events-none absolute left-1/2 max-w-[90vw] -translate-x-1/2 truncate text-center text-body",
+          isIOS ? "ios-lightbox-indicator text-white/90" : "text-neutral-300",
+        ].join(" ")}
+        style={{ bottom: isIOS ? "calc(var(--safe-bottom) + 2rem)" : "calc(var(--safe-bottom) + 1rem)" }}
       >
-        {current.displayName}
-        {images.length > 1 && (
-          <span className="ml-2 text-neutral-500">
+        {isIOS && images.length > 1 ? (
+          <span className="rounded-full bg-white/15 px-3 py-1 text-sm backdrop-blur-sm">
             {currentIndex + 1} / {images.length}
           </span>
+        ) : (
+          <>
+            {current.displayName}
+            {images.length > 1 && (
+              <span className="ml-2 text-neutral-500">
+                {currentIndex + 1} / {images.length}
+              </span>
+            )}
+          </>
         )}
       </div>
     </div>

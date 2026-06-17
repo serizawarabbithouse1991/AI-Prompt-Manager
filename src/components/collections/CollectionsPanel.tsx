@@ -16,6 +16,7 @@ import {
 import { formatBatchAssignResult, formatSkipReason } from "@/lib/smartAssign";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
+import { IOSGroupedList, IOSListRow } from "@/components/ios/IOSGroupedList";
 
 function parseKeywords(input: string): string[] {
   return input
@@ -29,7 +30,7 @@ function formatKeywords(keywords?: string[]): string {
   return keywords.join(", ");
 }
 
-export function CollectionsPanel() {
+export function CollectionsPanel({ variant = "default" }: { variant?: "default" | "ios" }) {
   const collections = useFileStore((s) => s.collections);
   const setCollections = useFileStore((s) => s.setCollections);
   const selectedCollectionId = useFileStore((s) => s.selectedCollectionId);
@@ -204,9 +205,49 @@ export function CollectionsPanel() {
     await setViewMode("collections");
   }
 
+  const isIOSVariant = variant === "ios";
+
   function renderCollectionItem(c: Collection) {
     const isSmart = c.kind === "smart_character";
     const isEditing = editingId === c.id;
+
+    if (isIOSVariant) {
+      return (
+        <div key={c.id}>
+          <IOSListRow
+            label={c.name}
+            value={`${c.fileCount} 件${isSmart ? " · スマート" : ""}`}
+            showChevron
+            onPress={() => void openCollection(c.id)}
+          />
+          {isSmart && isEditing && (
+            <div className="space-y-2 border-b border-[var(--ios-separator)] px-4 py-3">
+              <input
+                value={editKeywords}
+                onChange={(e) => setEditKeywords(e.target.value)}
+                placeholder="hatsune miku, 初音ミク"
+                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm"
+              />
+              <div className="flex gap-2">
+                <button type="button" onClick={() => void handleSaveKeywords(c)} className="text-sm text-blue-400">
+                  保存
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setEditKeywords("");
+                  }}
+                  className="text-sm text-neutral-400"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
 
     return (
       <div
@@ -287,6 +328,85 @@ export function CollectionsPanel() {
             )}
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (isIOSVariant) {
+    return (
+      <div className="ios-collections space-y-6 pb-8">
+        {!cacheReady && (
+          <IOSGroupedList title="初回セットアップ" footer="設定タブで danbooru2023.db をインポートし、辞書を更新してください。">
+            <IOSListRow label="設定を開く" showChevron onPress={() => void openSettings()} />
+          </IOSGroupedList>
+        )}
+
+        <IOSGroupedList title="スマート振り分け">
+          <IOSListRow
+            label={batchRunning ? "実行中…" : "スマート振り分けを実行"}
+            onPress={() => void handleBatchAssign()}
+            disabled={batchRunning || !cacheReady}
+          />
+          <IOSListRow label="診断テスト" onPress={() => void handleDiagnose()} />
+        </IOSGroupedList>
+
+        {diagnosisText && (
+          <pre className="overflow-x-auto rounded-lg bg-neutral-900/50 p-3 text-xs text-neutral-400 whitespace-pre-wrap">
+            {diagnosisText}
+          </pre>
+        )}
+
+        <IOSGroupedList title="新規コレクション">
+          <div className="space-y-2 border-b border-[var(--ios-separator)] px-4 py-3">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="コレクション名"
+              className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-base"
+            />
+            <button type="button" onClick={() => void handleCreate()} className="text-base text-blue-400">
+              手動で作成
+            </button>
+          </div>
+          <div className="space-y-2 px-4 py-3">
+            <input
+              value={smartName}
+              onChange={(e) => setSmartName(e.target.value)}
+              placeholder="スマート名（例: 初音ミク）"
+              className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-base"
+            />
+            <input
+              value={smartKeywords}
+              onChange={(e) => setSmartKeywords(e.target.value)}
+              placeholder="キーワード（カンマ区切り）"
+              className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-base"
+            />
+            <button type="button" onClick={() => void handleCreateSmart()} className="text-base text-blue-400">
+              スマート作成
+            </button>
+          </div>
+        </IOSGroupedList>
+
+        {suggestions.length > 0 && (
+          <IOSGroupedList title="未作成キャラ">
+            {suggestions.map((s) => (
+              <IOSListRow
+                key={s.tag}
+                label={s.tag}
+                value={`${s.hitCount} 回`}
+                onPress={() => void handleCreateSmart(s.tag)}
+              />
+            ))}
+          </IOSGroupedList>
+        )}
+
+        <IOSGroupedList title="一覧">
+          {collections.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-neutral-500">コレクションがありません</div>
+          ) : (
+            collections.map(renderCollectionItem)
+          )}
+        </IOSGroupedList>
       </div>
     );
   }

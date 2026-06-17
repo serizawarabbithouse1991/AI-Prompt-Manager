@@ -142,3 +142,72 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* ── iOS design tokens ── */
+[data-platform="ios"] {
+  --ios-bg: #000000;
+  --ios-bg-grouped: #1c1c1e;
+  --ios-bg-elevated: #2c2c2e;
+  --ios-separator: rgba(84, 84, 88, 0.65);
+  --ios-radius-sm: 10px;
+  --ios-radius-md: 12px;
+  --ios-radius-lg: 16px;
+  --ios-touch-min: 44px;
+  --ios-tab-bar-height: 49px;
+  --text-title: 2.125rem;
+  --grid-gap: 2px;
+}
+
+[data-platform="ios"][data-viewport="compact"] {
+  --grid-columns: 3;
+}
+
+[data-platform="ios"][data-viewport="regular"] {
+  --grid-columns: 4;
+}
+
+[data-platform="ios"][data-viewport="large"] {
+  --grid-columns: 6;
+}
+
+[data-platform="ios"] body,
+[data-platform="ios"] .ios-shell {
+  background: var(--ios-bg);
+}
+
+[data-platform="ios"] .ios-large-title {
+  font-size: 2.125rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+[data-platform="ios"] .ios-list-row {
+  min-height: var(--ios-touch-min);
+}
+
+[data-platform="ios"] .ios-touch-row {
+  min-height: var(--ios-touch-min);
+  padding: 0.75rem 1rem;
+}
+
+[data-platform="ios"] .file-grid-item {
+  border-radius: var(--ios-radius-sm);
+}
+
+[data-platform="ios"] .ios-tab-fade {
+  animation: fade-in 0.2s ease-out;
+}
+
+[data-platform="ios"] .ios-lightbox {
+  z-index: 65;
+}
+
+[data-platform="ios"] .ios-sheet-panel {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+[data-platform="ios"] .ios-tab-bar {
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}

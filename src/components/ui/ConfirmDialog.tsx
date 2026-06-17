@@ -1,6 +1,9 @@
 import { useConfirmStore } from "@/lib/confirm";
+import { useFileStore } from "@/features/files/store";
+import { isIOSPlatform } from "@/lib/platform";
 
 export function ConfirmDialog() {
+  const platformName = useFileStore((s) => s.platformName);
   const open = useConfirmStore((s) => s.open);
   const title = useConfirmStore((s) => s.title);
   const message = useConfirmStore((s) => s.message);
@@ -8,7 +11,7 @@ export function ConfirmDialog() {
   const danger = useConfirmStore((s) => s.danger);
   const close = useConfirmStore((s) => s.close);
 
-  if (!open) return null;
+  if (!open || isIOSPlatform(platformName)) return null;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 animate-fade-in">

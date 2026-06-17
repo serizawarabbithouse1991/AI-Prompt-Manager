@@ -1,14 +1,23 @@
 import { useToastStore } from "@/lib/toast";
+import { useFileStore } from "@/features/files/store";
+import { isIOSPlatform } from "@/lib/platform";
 
 export function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
+  const platformName = useFileStore((s) => s.platformName);
+  const isIOS = isIOSPlatform(platformName);
 
   if (toasts.length === 0) return null;
 
   return (
     <div
-      className="pointer-events-none fixed bottom-[calc(var(--safe-bottom)+4.5rem)] left-1/2 z-[60] flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4 lg:bottom-4"
+      className={[
+        "pointer-events-none fixed left-1/2 z-[60] flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4",
+        isIOS
+          ? "top-[calc(var(--safe-top)+0.5rem)]"
+          : "bottom-[calc(var(--safe-bottom)+4.5rem)] lg:bottom-4",
+      ].join(" ")}
       role="status"
       aria-live="polite"
     >

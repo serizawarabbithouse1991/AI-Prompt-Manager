@@ -1,52 +1,14 @@
-import { Toolbar } from "@/components/layout/Toolbar";
-import { Sidebar, BottomNav } from "@/components/layout/Sidebar";
-import { ScanProgressBanner } from "@/components/layout/ScanProgressBanner";
-import { StorageBanner } from "@/components/layout/StorageBanner";
-import { Inspector } from "@/components/layout/Inspector";
-import { SelectionBar } from "@/components/layout/SelectionBar";
-import { FileBrowser } from "@/components/file/FileBrowser";
-import { Breadcrumb } from "@/components/file/Breadcrumb";
-import { ViewControls } from "@/components/file/ViewControls";
-import { FilterPanel } from "@/components/file/FilterPanel";
-import { SettingsPanel } from "@/components/settings/SettingsPanel";
-import { CollectionsPanel } from "@/components/collections/CollectionsPanel";
-import { ToastContainer } from "@/components/ui/Toast";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useFileStore } from "@/features/files/store";
-import { useKeyboardShortcuts } from "@/features/files/useKeyboardShortcuts";
+import { isIOSPlatform } from "@/lib/platform";
+import { DesktopShell } from "@/components/layout/DesktopShell";
+import { IOSShell } from "@/components/ios/IOSShell";
 
 export function AppShell() {
-  const viewMode = useFileStore((s) => s.viewMode);
-  const selectedCollectionId = useFileStore((s) => s.selectedCollectionId);
-  useKeyboardShortcuts();
+  const platformName = useFileStore((s) => s.platformName);
 
-  function renderMain() {
-    if (viewMode === "settings") return <SettingsPanel />;
-    if (viewMode === "collections" && !selectedCollectionId) {
-      return <CollectionsPanel />;
-    }
-    return <FileBrowser />;
+  if (isIOSPlatform(platformName)) {
+    return <IOSShell />;
   }
 
-  return (
-    <div className="app-shell flex flex-col bg-neutral-950 text-neutral-100">
-      <Toolbar />
-      <ScanProgressBanner />
-      <StorageBanner />
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[240px_1fr_360px]">
-        <Sidebar />
-        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden safe-px pb-[calc(3.75rem+var(--safe-bottom))] lg:pb-0">
-          <Breadcrumb />
-          <ViewControls />
-          <FilterPanel />
-          <SelectionBar />
-          <div className="min-h-0 flex-1 overflow-hidden">{renderMain()}</div>
-        </main>
-        <Inspector />
-      </div>
-      <BottomNav />
-      <ToastContainer />
-      <ConfirmDialog />
-    </div>
-  );
+  return <DesktopShell />;
 }
