@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
-import type { DanbooruCacheProgress, ImportResult } from "@/features/files/types";
+import type { DanbooruCacheProgress, ImportResult, PromptTagMode, PromptTagSettings } from "@/features/files/types";
 import {
   cancelPhotoLibraryScan,
   importFromSaf,
@@ -17,11 +17,14 @@ import {
   rebuildDanbooruCharacterCache,
   importDanbooruDbFile,
   diagnoseSmartAssignment,
+  getPromptTagSettings,
+  setPromptTagSettings,
+  batchApplyPromptTags,
   type DanbooruIndexStatus,
   type StorageDiagnostics,
 } from "@/lib/tauri";
 import { formatNovelAiImportResult, formatPhotoScanResult, runPhotoLibraryScan } from "@/lib/photoScan";
-import { formatAssignSuffix, formatSkipReason } from "@/lib/smartAssign";
+import { formatAssignSuffix, formatBatchTagApplyResult, formatSkipReason } from "@/lib/smartAssign";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
 import {
@@ -75,6 +78,8 @@ export function SettingsPanel() {
   const [danbooruRebuilding, setDanbooruRebuilding] = useState(false);
   const [cacheProgress, setCacheProgress] = useState<DanbooruCacheProgress | null>(null);
   const [diagnosisText, setDiagnosisText] = useState<string | null>(null);
+  const [promptTagSettings, setPromptTagSettingsState] = useState<PromptTagSettings | null>(null);
+  const [batchTagRunning, setBatchTagRunning] = useState(false);
 
   const isDesktop = isDesktopPlatform(platformName);
   const isMobile = isMobilePlatform(platformName);
@@ -107,6 +112,9 @@ export function SettingsPanel() {
 
   useEffect(() => {
     void refreshDanbooruStatus();
+    void getPromptTagSettings()
+      .then(setPromptTagSettingsState)
+      .catch(() => setPromptTagSettingsState({ mode: "all", autoTagOnImport: true }));
     const unlisten = listen<DanbooruCacheProgress>("danbooru-cache-progress", (event) => {
       setCacheProgress(event.payload);
     });
@@ -114,6 +122,41 @@ export function SettingsPanel() {
       void unlisten.then((fn) => fn());
     };
   }, []);
+
+  async function handlePromptTagModeChange(mode: PromptTagMode) {
+    const auto = promptTagSettings?.autoTagOnImport ?? true;
+    try {
+      await setPromptTagSettings(mode, auto);
+      setPromptTagSettingsState({ mode, autoTagOnImport: auto });
+    } catch (e) {
+      toast(String(e), "error");
+    }
+  }
+
+  async function handleAutoTagOnImportToggle(enabled: boolean) {
+    const mode = promptTagSettings?.mode ?? "all";
+    try {
+      await setPromptTagSettings(mode, enabled);
+      setPromptTagSettingsState({ mode, autoTagOnImport: enabled });
+    } catch (e) {
+      toast(String(e), "error");
+    }
+  }
+
+  async function handleBatchApplyPromptTags() {
+    setBatchTagRunning(true);
+    try {
+      const result = await batchApplyPromptTags(promptTagSettings?.mode);
+      const message = formatBatchTagApplyResult(result);
+      setLastResult(message);
+      toast(message, result.skipReason ? "error" : "success");
+    } catch (e) {
+      setLastResult(String(e));
+      toast(String(e), "error");
+    } finally {
+      setBatchTagRunning(false);
+    }
+  }
 
   async function handleDiagnose() {
     try {
@@ -508,6 +551,50 @@ export function SettingsPanel() {
               </button>
             )}
           </div>
+        </section>
+
+        <section className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
+          <h2 className="text-sm font-medium">プロンプトからタグ付け</h2>
+          <p className="text-xs text-neutral-500">
+            画像の positive_prompt からタグを自動付与します。付与されたタグは kind=auto として保存されます。
+          </p>
+          <div className="space-y-2 text-xs text-neutral-400">
+            <p className="font-medium text-neutral-300">タグの範囲</p>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="promptTagMode"
+                checked={(promptTagSettings?.mode ?? "all") === "all"}
+                onChange={() => void handlePromptTagModeChange("all")}
+              />
+              全トークン（1girl, masterpiece など）
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="promptTagMode"
+                checked={promptTagSettings?.mode === "character"}
+                onChange={() => void handlePromptTagModeChange("character")}
+              />
+              キャラクターのみ（Danbooru 辞書が必要）
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-neutral-400">
+            <input
+              type="checkbox"
+              checked={promptTagSettings?.autoTagOnImport ?? true}
+              onChange={(e) => void handleAutoTagOnImportToggle(e.target.checked)}
+            />
+            取り込み時に自動でタグ付け
+          </label>
+          <button
+            type="button"
+            disabled={batchTagRunning}
+            onClick={() => void handleBatchApplyPromptTags()}
+            className="action-btn disabled:opacity-50"
+          >
+            {batchTagRunning ? "タグ付け中…" : "ライブラリ全体にタグ付け"}
+          </button>
         </section>
 
         <section className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">

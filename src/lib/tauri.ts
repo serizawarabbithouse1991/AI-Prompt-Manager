@@ -14,6 +14,10 @@ import type {
   SearchFilters,
   SmartAssignmentDiagnosis,
   DanbooruCacheProgress,
+  PromptTagSettings,
+  PromptTagMode,
+  TagApplyResult,
+  BatchTagApplyResult,
   SpecialPaths,
   RebuildDanbooruCacheResult,
 } from "@/features/files/types";
@@ -315,4 +319,37 @@ export async function backupDatabase(): Promise<string> {
   return invoke<string>("backup_database");
 }
 
-export type { Collection, SearchFilters, BackfillResult, CharacterSuggestion, BatchAssignResult, DanbooruIndexStatus, RebuildDanbooruCacheResult, SmartAssignmentDiagnosis, DanbooruCacheProgress };
+export async function getPromptTagSettings(): Promise<PromptTagSettings> {
+  return invoke<PromptTagSettings>("get_prompt_tag_settings");
+}
+
+export async function setPromptTagSettings(
+  mode: PromptTagMode,
+  autoTagOnImport: boolean,
+): Promise<void> {
+  return invoke("set_prompt_tag_settings", { mode, autoTagOnImport });
+}
+
+export async function applyPromptTagsForFile(
+  fileId: string,
+  absolutePath: string,
+  mode?: PromptTagMode,
+): Promise<TagApplyResult> {
+  return invoke<TagApplyResult>("apply_prompt_tags_for_file", {
+    fileId,
+    absolutePath,
+    mode: mode ?? null,
+  });
+}
+
+export async function batchApplyPromptTags(
+  mode?: PromptTagMode,
+  fileIds?: string[],
+): Promise<BatchTagApplyResult> {
+  return invoke<BatchTagApplyResult>("batch_apply_prompt_tags", {
+    mode: mode ?? null,
+    fileIds: fileIds ?? null,
+  });
+}
+
+export type { Collection, SearchFilters, BackfillResult, CharacterSuggestion, BatchAssignResult, DanbooruIndexStatus, RebuildDanbooruCacheResult, SmartAssignmentDiagnosis, DanbooruCacheProgress, PromptTagSettings, PromptTagMode, TagApplyResult, BatchTagApplyResult };

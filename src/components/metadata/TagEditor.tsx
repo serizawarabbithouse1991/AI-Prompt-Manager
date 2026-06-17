@@ -1,7 +1,16 @@
 import { useState } from "react";
 import type { Tag } from "@/features/tags/types";
-import { addTagToFile, createTag, getFileTags, listTags, removeTagFromFile } from "@/lib/tauri";
+import {
+  addTagToFile,
+  applyPromptTagsForFile,
+  createTag,
+  getFileTags,
+  listTags,
+  removeTagFromFile,
+} from "@/lib/tauri";
 import { useFileStore } from "@/features/files/store";
+import { formatSkipReason } from "@/lib/smartAssign";
+import { toast } from "@/lib/toast";
 
 type TagEditorProps = {
   fileId: string;
@@ -12,6 +21,7 @@ type TagEditorProps = {
 
 export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProps) {
   const [newTagName, setNewTagName] = useState("");
+  const [applying, setApplying] = useState(false);
   const setTags = useFileStore((s) => s.setTags);
   const setAllTags = useFileStore((s) => s.setAllTags);
   const refreshAllTags = useFileStore((s) => s.setAllTags);
@@ -42,11 +52,47 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
     setAllTags(updatedAll);
   }
 
+  async function handleApplyFromPrompt() {
+    setApplying(true);
+    try {
+      const result = await applyPromptTagsForFile(fileId, absolutePath);
+      if (result.skipReason) {
+        toast(formatSkipReason(result.skipReason), "error");
+        return;
+      }
+      const [fileTags, updatedAll] = await Promise.all([
+        getFileTags(fileId),
+        listTags(),
+      ]);
+      setTags(fileTags);
+      setAllTags(updatedAll);
+      if (result.tagsAdded > 0) {
+        toast(`${result.tagsAdded} タグを付与しました`, "success");
+      } else {
+        toast("追加するタグはありませんでした", "info");
+      }
+    } catch (e) {
+      toast(String(e), "error");
+    } finally {
+      setApplying(false);
+    }
+  }
+
   const unattached = allTags.filter((t) => !tags.some((ft) => ft.id === t.id));
 
   return (
     <div className="space-y-3 border-t border-neutral-800 pt-3">
-      <h3 className="text-sm font-medium text-neutral-300">Tags</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium text-neutral-300">Tags</h3>
+        <button
+          type="button"
+          onClick={() => void handleApplyFromPrompt()}
+          disabled={applying}
+          className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300 hover:border-neutral-500 disabled:opacity-50"
+        >
+          {applying ? "付与中…" : "プロンプトからタグ付け"}
+        </button>
+      </div>
       <div className="flex flex-wrap gap-2">
         {tags.map((tag) => (
           <span
@@ -54,6 +100,9 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
             className="inline-flex items-center gap-1 rounded-full bg-neutral-800 px-2 py-1 text-xs"
           >
             {tag.name}
+            {tag.kind === "auto" && (
+              <span className="rounded bg-neutral-700 px-1 text-[10px] text-neutral-400">auto</span>
+            )}
             <button
               type="button"
               onClick={() => void handleRemove(tag.id)}

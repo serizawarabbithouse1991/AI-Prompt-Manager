@@ -59,6 +59,7 @@ export type ImportResult = {
   duplicateCount?: number;
   assignedCollectionCount?: number;
   assignSkipReason?: string | null;
+  tagsAddedCount?: number;
 };
 
 export type ImportProgress = {
@@ -146,6 +147,27 @@ export type DanbooruCacheProgress = {
   phase: string;
   count: number;
   message: string;
+};
+
+export type PromptTagMode = "all" | "character";
+
+export type PromptTagSettings = {
+  mode: PromptTagMode;
+  autoTagOnImport: boolean;
+};
+
+export type TagApplyResult = {
+  tagsAdded: number;
+  tagsSkipped: number;
+  skipReason?: string | null;
+};
+
+export type BatchTagApplyResult = {
+  filesProcessed: number;
+  tagsAdded: number;
+  tagsSkipped: number;
+  filesWithoutPrompt: number;
+  skipReason?: string | null;
 };
 
 export type DanbooruIndexStatus = {

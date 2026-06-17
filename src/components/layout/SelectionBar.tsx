@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useFileStore } from "@/features/files/store";
 import {
   batchAddTag,
+  batchApplyPromptTags,
   batchRemoveFromLibrary,
   batchSetFavorite,
   batchTrash,
@@ -12,6 +13,7 @@ import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
 import { open } from "@tauri-apps/plugin-dialog";
 import { confirmAction } from "@/lib/confirm";
 import { toast } from "@/lib/toast";
+import { formatBatchTagApplyResult } from "@/lib/smartAssign";
 import { IconStar } from "@/components/ui/Icons";
 
 export function SelectionBar() {
@@ -50,6 +52,13 @@ export function SelectionBar() {
         selectedFiles.map((f) => ({ fileId: f.id, absolutePath: f.absolutePath })),
         isFavorite,
       );
+    });
+  }
+
+  async function handleApplyPromptTags() {
+    await runBatch("プロンプトからタグ付け", async () => {
+      const result = await batchApplyPromptTags(undefined, selectedFileIds);
+      toast(formatBatchTagApplyResult(result), result.skipReason ? "error" : "success");
     });
   }
 
@@ -162,6 +171,9 @@ export function SelectionBar() {
           </div>
         )}
       </div>
+      <button type="button" onClick={() => void handleApplyPromptTags()} className="action-btn">
+        プロンプトからタグ付け
+      </button>
       {isDesktop && (
         <>
           <button type="button" onClick={() => void handleCopy()} className="action-btn">

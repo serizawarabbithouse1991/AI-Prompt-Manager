@@ -68,6 +68,8 @@ pub struct ImportResult {
     pub assigned_collection_count: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assign_skip_reason: Option<String>,
+    #[serde(default)]
+    pub tags_added_count: u32,
 }
 
 pub fn detect_file_kind(extension: &str, is_directory: bool) -> String {

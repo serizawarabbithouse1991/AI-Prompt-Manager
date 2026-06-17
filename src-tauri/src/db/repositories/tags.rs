@@ -25,6 +25,70 @@ pub fn list_tags(conn: &Connection) -> Result<Vec<Tag>, String> {
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+pub fn find_tag_by_name(conn: &Connection, name: &str) -> Result<Option<Tag>, String> {
+    let mut stmt = conn
+        .prepare("SELECT * FROM tags WHERE name = ?1 LIMIT 1")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt
+        .query(params![name])
+        .map_err(|e| e.to_string())?;
+    if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        return Ok(Some(row_to_tag(&row).map_err(|e| e.to_string())?));
+    }
+    Ok(None)
+}
+
+pub fn get_or_create_tag(conn: &Connection, name: &str, kind: &str) -> Result<Tag, String> {
+    if let Some(tag) = find_tag_by_name(conn, name)? {
+        return Ok(tag);
+    }
+    let tag = Tag {
+        id: Uuid::new_v4().to_string(),
+        name: name.to_string(),
+        color: None,
+        kind: kind.to_string(),
+        created_at: Some(now_iso()),
+    };
+    conn.execute(
+        "INSERT INTO tags (id, name, color, kind, created_at) VALUES (?1,?2,?3,?4,?5)",
+        params![tag.id, tag.name, tag.color, tag.kind, tag.created_at],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(tag)
+}
+
+pub fn add_auto_tags_to_file(
+    conn: &Connection,
+    file_id: &str,
+    absolute_path: &str,
+    tag_names: &[String],
+) -> Result<(u32, u32), String> {
+    if tag_names.is_empty() {
+        return Ok((0, 0));
+    }
+    if files_repo::get_by_id(conn, file_id)?.is_none() {
+        files_repo::ensure_file_by_path(conn, absolute_path)?;
+    }
+
+    let existing: std::collections::HashSet<String> = get_file_tags(conn, file_id)?
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
+
+    let mut added = 0u32;
+    let mut skipped = 0u32;
+    for name in tag_names {
+        if existing.contains(name) {
+            skipped += 1;
+            continue;
+        }
+        let tag = get_or_create_tag(conn, name, "auto")?;
+        add_tag_to_file(conn, file_id, &tag.id)?;
+        added += 1;
+    }
+    Ok((added, skipped))
+}
+
 pub fn create_tag(conn: &Connection, name: &str, color: Option<&str>) -> Result<Tag, String> {
     let tag = Tag {
         id: Uuid::new_v4().to_string(),

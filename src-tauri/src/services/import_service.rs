@@ -9,7 +9,7 @@ use zip::ZipArchive;
 
 use crate::db::repositories::{files as files_repo, metadata as metadata_repo};
 use crate::models::file::{detect_file_kind, ImportResult};
-use crate::services::{character_matcher, hash::file_content_hash, metadata_extractor, thumbnailer};
+use crate::services::{character_matcher, hash::file_content_hash, metadata_extractor, prompt_tagger, thumbnailer};
 
 enum ImportImageOutcome {
     Imported(crate::models::file::FileEntry),
@@ -218,6 +218,19 @@ fn import_file(
                 if assign.assigned_count == 0 {
                     if let Some(reason) = assign.skip_reason {
                         result.assign_skip_reason = Some(reason);
+                    }
+                }
+            }
+            if let Ok(settings) = prompt_tagger::get_prompt_tag_settings(conn) {
+                if settings.auto_tag_on_import {
+                    let mode = prompt_tagger::PromptTagMode::from_setting(&settings.mode);
+                    if let Ok(tag_result) = prompt_tagger::apply_prompt_tags_for_file(
+                        conn,
+                        &entry.id,
+                        &entry.absolute_path,
+                        mode,
+                    ) {
+                        result.tags_added_count += tag_result.tags_added;
                     }
                 }
             }

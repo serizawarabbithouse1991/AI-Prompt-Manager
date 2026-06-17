@@ -6,4 +6,5 @@ pub mod hash;
 pub mod import_service;
 pub mod library_reconcile;
 pub mod metadata_extractor;
+pub mod prompt_tagger;
 pub mod thumbnailer;

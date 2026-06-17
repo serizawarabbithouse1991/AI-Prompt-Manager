@@ -1,4 +1,4 @@
-import type { BatchAssignResult, ImportResult } from "@/features/files/types";
+import type { BatchAssignResult, BatchTagApplyResult, ImportResult } from "@/features/files/types";
 
 const SKIP_MESSAGES: Record<string, string> = {
   cache_not_ready: "辞書が未構築です。設定で danbooru2023.db をインポートし「辞書を更新」してください。",
@@ -13,13 +13,38 @@ export function formatSkipReason(reason?: string | null): string {
 
 export function formatAssignSuffix(result: ImportResult): string {
   const assigned = result.assignedCollectionCount ?? 0;
+  const tagsAdded = result.tagsAddedCount ?? 0;
+  const parts: string[] = [];
   if (assigned > 0) {
-    return `、${assigned} 件をコレクションに振り分け`;
+    parts.push(`${assigned} 件をコレクションに振り分け`);
+  }
+  if (tagsAdded > 0) {
+    parts.push(`${tagsAdded} タグを付与`);
+  }
+  if (parts.length > 0) {
+    return `、${parts.join("、")}`;
   }
   if (result.assignSkipReason) {
     return `（振り分けスキップ: ${formatSkipReason(result.assignSkipReason)}）`;
   }
   return "";
+}
+
+export function formatBatchTagApplyResult(result: BatchTagApplyResult): string {
+  if (result.skipReason) {
+    return formatSkipReason(result.skipReason);
+  }
+  const parts = [
+    `${result.filesProcessed} 件を処理`,
+    `${result.tagsAdded} タグを追加`,
+  ];
+  if ((result.tagsSkipped ?? 0) > 0) {
+    parts.push(`既存 ${result.tagsSkipped} タグをスキップ`);
+  }
+  if ((result.filesWithoutPrompt ?? 0) > 0) {
+    parts.push(`プロンプトなし ${result.filesWithoutPrompt} 件`);
+  }
+  return `タグ付け完了: ${parts.join("、")}`;
 }
 
 export function formatBatchAssignResult(result: BatchAssignResult): string {
