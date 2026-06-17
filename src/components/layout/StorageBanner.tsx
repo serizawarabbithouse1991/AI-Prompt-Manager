@@ -15,7 +15,8 @@ export function StorageBanner() {
   if (!diagnostics) return null;
 
   const mismatch =
-    diagnostics.diskFileCount > 0 && diagnostics.dbLibraryCount === 0;
+    diagnostics.missingDbFileCount > 0 ||
+    (diagnostics.diskFileCount > 0 && diagnostics.dbLibraryCount === 0);
 
   return (
     <div
@@ -27,7 +28,9 @@ export function StorageBanner() {
       ].join(" ")}
     >
       ディスク {diagnostics.diskFileCount} 件 / DB {diagnostics.dbLibraryCount} 件
-      {mismatch && " — 再同期をおすすめします"}
+      {diagnostics.missingDbFileCount > 0 &&
+        ` / 実体なし ${diagnostics.missingDbFileCount} 件`}
+      {mismatch && " — 設定で再同期してください"}
     </div>
   );
 }

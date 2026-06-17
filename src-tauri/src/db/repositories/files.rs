@@ -3,7 +3,9 @@ use rusqlite::{params, Connection, Row};
 use crate::db::connection::now_iso;
 use crate::models::file::{detect_file_kind, detect_mime, FileEntry};
 use crate::services::hash::path_to_id;
-use crate::services::library_reconcile::{ai_library_path_patterns, normalize_storage_path};
+use crate::services::library_reconcile::{
+    self, ai_library_path_patterns, normalize_storage_path, path_exists_on_disk,
+};
 
 pub(crate) fn row_to_file(row: &Row) -> Result<FileEntry, rusqlite::Error> {
     Ok(FileEntry {
@@ -228,10 +230,12 @@ pub fn merge_db_info(conn: &Connection, entries: &mut [FileEntry]) -> Result<(),
     Ok(())
 }
 
-pub fn attach_db_metadata(conn: &Connection, files: &mut [FileEntry]) -> Result<(), String> {
+pub fn attach_db_metadata(conn: &Connection, files: &mut Vec<FileEntry>) -> Result<(), String> {
     merge_db_info(conn, files)?;
     attach_thumbnail_paths(conn, files)?;
-    attach_ai_summaries(conn, files)
+    attach_ai_summaries(conn, files)?;
+    library_reconcile::prepare_files_for_asset_display(files);
+    Ok(())
 }
 
 pub fn attach_ai_summaries(conn: &Connection, files: &mut [FileEntry]) -> Result<(), String> {
@@ -379,9 +383,10 @@ pub fn attach_thumbnail_paths(conn: &Connection, files: &mut [FileEntry]) -> Res
             .query_row(
                 "SELECT local_path FROM thumbnails WHERE file_id = ?1 AND size = 256 LIMIT 1",
                 params![file.id],
-                |row| row.get(0),
+                |row| row.get::<_, String>(0),
             )
-            .ok();
+            .ok()
+            .filter(|path| path_exists_on_disk(path));
         file.thumbnail_path = thumb;
     }
     Ok(())

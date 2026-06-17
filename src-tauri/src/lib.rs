@@ -43,6 +43,7 @@ pub fn run() {
             commands::files::batch_remove_from_library,
             commands::files::share_file,
             commands::files::get_storage_diagnostics,
+            commands::files::diagnose_image_loading,
             commands::files::reconcile_ai_library,
             commands::collections::list_collections,
             commands::collections::create_collection,

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { VirtuosoGrid } from "react-virtuoso";
 import { useFileStore, useDisplayFiles } from "@/features/files/store";
@@ -7,7 +7,8 @@ import { isMobilePlatform } from "@/lib/platform";
 import { showFileContextMenu } from "@/components/file/FileContextMenu";
 import { EmptyState } from "@/components/file/EmptyState";
 import { GridSkeleton } from "@/components/file/GridSkeleton";
-import { IconFolder, IconImage, IconStar } from "@/components/ui/Icons";
+import { IconCheck, IconFolder, IconImage, IconStar } from "@/components/ui/Icons";
+import { useGridPinchZoom } from "@/hooks/useGridPinchZoom";
 import type { FileEntry } from "@/features/files/types";
 
 function useLongPress(onLongPress: () => void) {
@@ -30,16 +31,33 @@ function useLongPress(onLongPress: () => void) {
 function FileThumbnail({ file }: { file: FileEntry }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [useOriginal, setUseOriginal] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+    setUseOriginal(false);
+  }, [file.id, file.thumbnailPath, file.absolutePath]);
+
+  const imageSrc = useOriginal || !file.thumbnailPath ? file.absolutePath : file.thumbnailPath;
 
   if (file.fileKind === "image" && !failed) {
     return (
       <img
-        src={convertFileSrc(file.thumbnailPath ?? file.absolutePath)}
+        key={`${file.id}:${useOriginal ? "orig" : "thumb"}`}
+        src={convertFileSrc(imageSrc)}
         alt={file.displayName}
         loading="lazy"
         decoding="async"
         onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
+        onError={() => {
+          if (!useOriginal && file.thumbnailPath) {
+            setUseOriginal(true);
+            setLoaded(false);
+            return;
+          }
+          setFailed(true);
+        }}
         className={[
           "h-full w-full object-cover transition-opacity duration-300",
           loaded ? "opacity-100" : "opacity-0",
@@ -50,7 +68,7 @@ function FileThumbnail({ file }: { file: FileEntry }) {
 
   if (file.isDirectory) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-neutral-500">
+      <div className="flex h-full w-full items-center justify-center bg-neutral-900 text-neutral-500">
         <IconFolder className="h-8 w-8" />
       </div>
     );
@@ -58,7 +76,7 @@ function FileThumbnail({ file }: { file: FileEntry }) {
 
   if (file.fileKind === "image" && failed) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-neutral-500">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-neutral-900 text-neutral-500">
         <IconImage className="h-6 w-6" />
         <span className="text-micro">読込失敗</span>
       </div>
@@ -66,7 +84,7 @@ function FileThumbnail({ file }: { file: FileEntry }) {
   }
 
   return (
-    <div className="flex h-full w-full items-center justify-center text-caption text-neutral-500">
+    <div className="flex h-full w-full items-center justify-center bg-neutral-900 text-caption text-neutral-500">
       {file.extension || "file"}
     </div>
   );
@@ -77,16 +95,31 @@ function MetadataBadges({ file }: { file: FileEntry }) {
   return (
     <div className="absolute bottom-0 left-0 right-0 flex flex-wrap gap-0.5 bg-gradient-to-t from-black/80 to-transparent p-1">
       {file.aiModel && (
-        <span className="max-w-full truncate rounded bg-neutral-900/90 px-1 py-0.5 text-micro text-blue-200">
+        <span className="max-w-full truncate rounded bg-black/60 px-1 py-0.5 text-micro text-blue-200">
           {file.aiModel}
         </span>
       )}
       {file.aiSteps != null && file.aiSteps > 0 && (
-        <span className="rounded bg-neutral-900/90 px-1 py-0.5 text-micro text-neutral-300">
+        <span className="rounded bg-black/60 px-1 py-0.5 text-micro text-neutral-300">
           {file.aiSteps} steps
         </span>
       )}
     </div>
+  );
+}
+
+function SelectionBadge({ selected }: { selected: boolean }) {
+  return (
+    <span
+      className={[
+        "absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2",
+        selected
+          ? "border-blue-500 bg-blue-500 text-white"
+          : "border-white/80 bg-black/20",
+      ].join(" ")}
+    >
+      {selected && <IconCheck className="h-3 w-3" />}
+    </span>
   );
 }
 
@@ -144,6 +177,7 @@ function useFileSelection() {
     handleOpen,
     handleContextMenu,
     enterSelectionMode,
+    selectionMode,
   };
 }
 
@@ -151,6 +185,9 @@ function FileGridItem({
   file,
   selected,
   isMobile,
+  selectionMode,
+  showMetadata,
+  showFilename,
   onClick,
   onDoubleClick,
   onContextMenu,
@@ -159,6 +196,9 @@ function FileGridItem({
   file: FileEntry;
   selected: boolean;
   isMobile: boolean;
+  selectionMode: boolean;
+  showMetadata: boolean;
+  showFilename: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -178,22 +218,24 @@ function FileGridItem({
       onTouchEnd={longPress.cancel}
       onTouchMove={longPress.cancel}
       className={[
-        "rounded-lg border p-1.5 text-left transition-colors sm:p-2",
-        selected
-          ? "border-blue-500 bg-blue-500/10"
-          : "border-neutral-800 bg-neutral-900 hover:border-neutral-700",
+        "file-grid-item text-left active:opacity-80",
+        selected && !selectionMode ? "ring-2 ring-inset ring-blue-500" : "",
+        selectionMode && selected ? "ring-2 ring-inset ring-blue-500" : "",
       ].join(" ")}
     >
-      <div className="relative mb-2 aspect-square overflow-hidden rounded bg-neutral-800">
-        <FileThumbnail file={file} />
-        {file.isFavorite && (
-          <span className="absolute right-1 top-1 text-yellow-400">
-            <IconStar className="h-3.5 w-3.5" filled />
-          </span>
-        )}
-        <MetadataBadges file={file} />
-      </div>
-      <div className="truncate text-caption">{file.displayName}</div>
+      <FileThumbnail file={file} />
+      {file.isFavorite && !selectionMode && (
+        <span className="absolute left-1 top-1 text-yellow-400 drop-shadow">
+          <IconStar className="h-3.5 w-3.5" filled />
+        </span>
+      )}
+      {selectionMode && <SelectionBadge selected={selected} />}
+      {showMetadata && <MetadataBadges file={file} />}
+      {showFilename && (
+        <div className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 py-0.5 text-micro text-neutral-200">
+          {file.displayName}
+        </div>
+      )}
     </button>
   );
 }
@@ -203,11 +245,18 @@ export function FileGrid() {
   const loading = useFileStore((s) => s.loading);
   const error = useFileStore((s) => s.error);
   const viewMode = useFileStore((s) => s.viewMode);
+  const gridColumns = useFileStore((s) => s.gridColumns);
   const searchHasMore = useFileStore((s) => s.searchHasMore);
   const searchLoadingMore = useFileStore((s) => s.searchLoadingMore);
   const loadMoreSearch = useFileStore((s) => s.loadMoreSearch);
-  const { isMobile, isSelected, handleClick, handleOpen, handleContextMenu, enterSelectionMode } =
+  const { isMobile, isSelected, handleClick, handleOpen, handleContextMenu, enterSelectionMode, selectionMode } =
     useFileSelection();
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  useGridPinchZoom(containerRef);
+
+  const showMetadata = gridColumns <= 4;
+  const showFilename = !isMobile;
 
   const renderItem = useCallback(
     (index: number) => {
@@ -218,6 +267,9 @@ export function FileGrid() {
           file={file}
           selected={isSelected(file.id)}
           isMobile={isMobile}
+          selectionMode={selectionMode}
+          showMetadata={showMetadata}
+          showFilename={showFilename}
           onClick={(e) => handleClick(file, file.id, e)}
           onDoubleClick={() => handleOpen(file)}
           onContextMenu={(e) => handleContextMenu(e, file.id)}
@@ -229,6 +281,9 @@ export function FileGrid() {
       displayFiles,
       isMobile,
       isSelected,
+      selectionMode,
+      showMetadata,
+      showFilename,
       handleClick,
       handleOpen,
       handleContextMenu,
@@ -253,12 +308,13 @@ export function FileGrid() {
   }
 
   return (
-    <div className="h-full min-h-0 p-2 sm:p-4">
+    <div ref={containerRef} className="file-grid-scroll h-full min-h-0 bg-black">
       <VirtuosoGrid
+        key={gridColumns}
         className="h-full min-h-0"
         totalCount={displayFiles.length}
         listClassName="file-grid"
-        itemClassName="min-w-0"
+        itemClassName="file-grid-item"
         itemContent={renderItem}
         endReached={() => {
           if (viewMode === "search" && searchHasMore && !searchLoadingMore) {

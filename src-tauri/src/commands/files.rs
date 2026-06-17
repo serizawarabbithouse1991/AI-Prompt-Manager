@@ -491,6 +491,16 @@ pub async fn share_file(app: AppHandle, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn diagnose_image_loading(
+    app: AppHandle,
+    sample_limit: Option<u32>,
+) -> Result<library_reconcile::ImageLoadingDiagnosis, String> {
+    let app_data = app_data_dir(&app)?;
+    let limit = sample_limit.unwrap_or(20);
+    with_conn(&app, |conn| library_reconcile::diagnose_image_loading(conn, &app_data, limit))
+}
+
+#[tauri::command]
 pub async fn get_storage_diagnostics(
     app: AppHandle,
 ) -> Result<library_reconcile::StorageDiagnostics, String> {

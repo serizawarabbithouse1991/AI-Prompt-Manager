@@ -216,13 +216,35 @@ export type StorageDiagnostics = {
   dbLibraryCount: number;
   dbFavoriteCount: number;
   processedPhotoCount: number;
+  missingDbFileCount: number;
 };
 
 export type ReconcileResult = {
   diskFileCount: number;
   dbLibraryCount: number;
   restoredCount: number;
+  prunedCount: number;
 };
+
+export type ImageLoadingSample = {
+  fileId: string;
+  absolutePath: string;
+  fileExists: boolean;
+  thumbnailPath?: string | null;
+  thumbnailExists: boolean;
+  extension?: string | null;
+  assetUrlSample: string;
+};
+
+export type ImageLoadingDiagnosis = {
+  totalLibraryCount: number;
+  missingFileCount: number;
+  samples: ImageLoadingSample[];
+};
+
+export async function diagnoseImageLoading(sampleLimit = 20): Promise<ImageLoadingDiagnosis> {
+  return invoke<ImageLoadingDiagnosis>("diagnose_image_loading", { sampleLimit });
+}
 
 export async function getStorageDiagnostics(): Promise<StorageDiagnostics> {
   return invoke<StorageDiagnostics>("get_storage_diagnostics");

@@ -227,13 +227,15 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
       const result = await reconcileAiLibrary();
       await refreshStorageDiagnostics();
       setLastResult(
-        `再同期: ディスク ${result.diskFileCount} 件 / DB ${result.dbLibraryCount} 件 → ${result.restoredCount} 件を復元`,
+        `再同期: ディスク ${result.diskFileCount} 件 / DB ${result.dbLibraryCount} 件 → 復元 ${result.restoredCount} 件 / 整理 ${result.prunedCount} 件`,
       );
       toast(
-        result.restoredCount > 0 ? `${result.restoredCount} 件を復元しました` : "再同期が完了しました",
+        result.restoredCount > 0 || result.prunedCount > 0
+          ? `復元 ${result.restoredCount} 件、整理 ${result.prunedCount} 件`
+          : "再同期が完了しました",
         "success",
       );
-      if (result.restoredCount > 0) {
+      if (result.restoredCount > 0 || result.prunedCount > 0) {
         await setViewMode("ai-library");
       }
     } catch (e) {
@@ -558,6 +560,10 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
             <>
               <IOSListRow label="ディスク上の画像" value={`${storageDiagnostics.diskFileCount} 件`} />
               <IOSListRow label="DB 登録（Library）" value={`${storageDiagnostics.dbLibraryCount} 件`} />
+              <IOSListRow
+                label="実体のない DB 登録"
+                value={`${storageDiagnostics.missingDbFileCount} 件`}
+              />
               <IOSListRow label="DB サイズ" value={`${Math.round(storageDiagnostics.databaseBytes / 1024)} KB`} />
             </>
           )}
@@ -814,6 +820,10 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
                 <div className="flex justify-between gap-4">
                   <dt>DB 登録（Library）</dt>
                   <dd>{storageDiagnostics.dbLibraryCount} 件</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>実体のない DB 登録</dt>
+                  <dd>{storageDiagnostics.missingDbFileCount} 件</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt>DB 全体</dt>

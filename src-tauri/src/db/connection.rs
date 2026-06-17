@@ -17,10 +17,11 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
     migrations::run_migrations(&conn)?;
     if let Ok(diagnostics) = library_reconcile::get_storage_diagnostics(&conn, &app_data) {
         eprintln!(
-            "storage diagnostics: disk={} db_library={} db_total={} db_bytes={}",
+            "storage diagnostics: disk={} db_library={} db_total={} missing_db={} db_bytes={}",
             diagnostics.disk_file_count,
             diagnostics.db_library_count,
             diagnostics.db_total_count,
+            diagnostics.missing_db_file_count,
             diagnostics.database_bytes
         );
     }
