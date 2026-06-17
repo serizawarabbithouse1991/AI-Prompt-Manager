@@ -99,7 +99,7 @@ export function Lightbox() {
       dragOffsetRef.current = 0;
       setDragOffset(0);
 
-      if (isIOS && offset > 80) {
+      if (isIOS && offset > 50) {
         setLightboxFileId(null);
         return;
       }
@@ -144,8 +144,8 @@ export function Lightbox() {
   return (
     <div
       className={[
-        "fixed inset-0 z-50 flex touch-none items-center justify-center transition-opacity duration-200",
-        isIOS ? "ios-lightbox z-[65] bg-black" : "z-50 bg-black/90",
+        "fixed inset-0 flex items-center justify-center transition-opacity duration-200",
+        isIOS ? "ios-lightbox z-[65] bg-black" : "z-50 touch-none bg-black/90",
         visible ? "opacity-100" : "opacity-0",
       ].join(" ")}
       style={{
@@ -156,42 +156,66 @@ export function Lightbox() {
       }}
       onClick={() => setLightboxFileId(null)}
     >
-      {!isIOS && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setLightboxFileId(null);
-          }}
-          className="absolute z-10 rounded bg-neutral-800 px-3 py-1 text-body hover:bg-neutral-700 focus-ring"
-          style={{
-            top: "calc(var(--safe-top) + 0.75rem)",
-            right: "calc(var(--safe-right) + 0.75rem)",
-          }}
+      {isIOS ? (
+        <div
+          className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-2"
+          style={{ paddingTop: "var(--safe-top)" }}
         >
-          閉じる
-        </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxFileId(null);
+            }}
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-base font-medium text-blue-400"
+          >
+            完了
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openInspector();
+            }}
+            className="flex min-h-11 items-center gap-1 rounded-full px-3 text-base text-blue-400"
+          >
+            <IconInfo className="h-4 w-4" />
+            詳細
+          </button>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxFileId(null);
+            }}
+            className="absolute z-10 rounded bg-neutral-800 px-3 py-1 text-body hover:bg-neutral-700 focus-ring"
+            style={{
+              top: "calc(var(--safe-top) + 0.75rem)",
+              right: "calc(var(--safe-right) + 0.75rem)",
+            }}
+          >
+            閉じる
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openInspector();
+            }}
+            className="absolute z-10 flex items-center gap-1 rounded bg-neutral-800 px-3 py-1.5 text-body hover:bg-neutral-700 focus-ring lg:hidden"
+            style={{
+              top: "calc(var(--safe-top) + 0.75rem)",
+              left: "calc(var(--safe-left) + 0.75rem)",
+            }}
+          >
+            <IconInfo className="h-4 w-4" />
+            詳細
+          </button>
+        </>
       )}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          openInspector();
-        }}
-        className={[
-          "absolute z-10 flex items-center gap-1 rounded px-3 py-1.5 text-body focus-ring",
-          isIOS
-            ? "ios-lightbox-info-btn bg-white/10 text-white backdrop-blur-sm"
-            : "bg-neutral-800 hover:bg-neutral-700 lg:hidden",
-        ].join(" ")}
-        style={{
-          top: "calc(var(--safe-top) + 0.75rem)",
-          left: "calc(var(--safe-left) + 0.75rem)",
-        }}
-      >
-        <IconInfo className="h-4 w-4" />
-        詳細
-      </button>
       {currentIndex > 0 && !isIOS && (
         <button
           type="button"
@@ -220,7 +244,7 @@ export function Lightbox() {
       )}
       <div
         ref={swipeAreaRef}
-        className="relative flex max-h-[90vh] max-w-[100vw] items-center justify-center px-2"
+        className="relative flex max-h-[90vh] max-w-[100vw] touch-none items-center justify-center px-2"
         onClick={(e) => e.stopPropagation()}
       >
         <img
