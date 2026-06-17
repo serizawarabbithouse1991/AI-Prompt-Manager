@@ -49,6 +49,7 @@ pub fn run() {
             commands::collections::create_smart_collection,
             commands::collections::update_collection_keywords,
             commands::collections::batch_assign_smart_collections,
+            commands::collections::diagnose_smart_assignment,
             commands::collections::list_character_suggestions,
             commands::collections::dismiss_character_suggestion,
             commands::collections::delete_collection,

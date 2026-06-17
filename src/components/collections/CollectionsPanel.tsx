@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFileStore } from "@/features/files/store";
-import type { CharacterSuggestion, Collection } from "@/features/files/types";
+import type { CharacterSuggestion, Collection, DanbooruIndexStatus } from "@/features/files/types";
 import {
   batchAssignSmartCollections,
   createCollection,
   createSmartCollection,
   deleteCollection,
   dismissCharacterSuggestion,
+  diagnoseSmartAssignment,
+  getDanbooruIndexStatus,
   listCharacterSuggestions,
   listCollections,
   updateCollectionKeywords,
 } from "@/lib/tauri";
+import { formatBatchAssignResult, formatSkipReason } from "@/lib/smartAssign";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
 
@@ -39,6 +42,19 @@ export function CollectionsPanel() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editKeywords, setEditKeywords] = useState("");
+  const [danbooruStatus, setDanbooruStatus] = useState<DanbooruIndexStatus | null>(null);
+  const [diagnosisText, setDiagnosisText] = useState<string | null>(null);
+
+  const cacheReady = danbooruStatus?.cacheReady ?? false;
+
+  const refreshDanbooruStatus = useCallback(async () => {
+    try {
+      const status = await getDanbooruIndexStatus();
+      setDanbooruStatus(status);
+    } catch {
+      setDanbooruStatus(null);
+    }
+  }, []);
 
   const refreshCollections = useCallback(async () => {
     const updated = await listCollections();
@@ -58,7 +74,8 @@ export function CollectionsPanel() {
   useEffect(() => {
     void refreshCollections().catch(() => setCollections([]));
     void refreshSuggestions();
-  }, [refreshCollections, refreshSuggestions, setCollections]);
+    void refreshDanbooruStatus();
+  }, [refreshCollections, refreshSuggestions, refreshDanbooruStatus, setCollections]);
 
   async function handleCreate() {
     const name = newName.trim();
@@ -94,20 +111,49 @@ export function CollectionsPanel() {
   }
 
   async function handleBatchAssign() {
+    if (!cacheReady) {
+      toast(formatSkipReason("cache_not_ready"), "error");
+      return;
+    }
     setBatchRunning(true);
     try {
       const result = await batchAssignSmartCollections();
       await refreshCollections();
       await refreshSuggestions();
-      toast(
-        `振り分け完了: ${result.filesProcessed} 件を処理、${result.assignmentsAdded} 件を追加`,
-        "success",
-      );
+      const message = formatBatchAssignResult(result);
+      if (result.skipReason || result.assignmentsAdded === 0) {
+        toast(message, result.skipReason ? "error" : "info");
+      } else {
+        toast(message, "success");
+      }
     } catch (e) {
       toast(String(e), "error");
     } finally {
       setBatchRunning(false);
     }
+  }
+
+  async function handleDiagnose() {
+    try {
+      const d = await diagnoseSmartAssignment();
+      const lines = [
+        `ファイル: ${d.fileId ?? "—"}`,
+        `プロンプト: ${d.hasPrompt ? d.promptPreview ?? "あり" : "なし"}`,
+        `辞書: ${d.cacheReady ? `${d.cacheCount.toLocaleString()} タグ` : "未構築"}`,
+        `トークン: ${d.tokenizedTags.slice(0, 8).join(", ") || "—"}`,
+        `マッチ: ${d.matchedCharacterTags.join(", ") || "なし"}`,
+      ];
+      if (d.skipReason) {
+        lines.push(`理由: ${formatSkipReason(d.skipReason)}`);
+      }
+      setDiagnosisText(lines.join("\n"));
+    } catch (e) {
+      toast(String(e), "error");
+    }
+  }
+
+  async function openSettings() {
+    await setViewMode("settings");
   }
 
   async function handleSaveKeywords(collection: Collection) {
@@ -255,19 +301,51 @@ export function CollectionsPanel() {
           </p>
         </div>
 
+        {!cacheReady && (
+          <section className="space-y-2 rounded-lg border border-amber-900/60 bg-amber-950/30 p-4">
+            <h2 className="text-body font-medium text-amber-200">初回セットアップ</h2>
+            <p className="text-caption text-amber-100/80">
+              スマート振り分けには Danbooru キャラクター辞書が必要です。
+            </p>
+            <ol className="list-decimal space-y-1 pl-4 text-caption text-amber-100/80">
+              <li>設定で danbooru2023.db をインポート</li>
+              <li>「辞書を更新」を実行（数分かかります）</li>
+              <li>この画面で「スマート振り分けを実行」</li>
+            </ol>
+            <button type="button" onClick={() => void openSettings()} className="action-btn px-3 py-2">
+              設定を開く
+            </button>
+          </section>
+        )}
+
         <section className="space-y-2 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
           <h2 className="text-body font-medium">スマート振り分け</h2>
           <p className="text-caption text-neutral-500">
-            既存ライブラリ全体を Danbooru キャラタグで再スキャンし、コレクションへ振り分けます。設定で辞書を更新してから実行してください。
+            既存ライブラリ全体を Danbooru キャラタグで再スキャンし、コレクションへ振り分けます。
+            {danbooruStatus && (
+              <span className="mt-1 block">
+                辞書: {cacheReady ? `${danbooruStatus.cacheCount.toLocaleString()} タグ` : "未構築"}
+              </span>
+            )}
           </p>
-          <button
-            type="button"
-            disabled={batchRunning}
-            onClick={() => void handleBatchAssign()}
-            className="action-btn px-3 py-2 disabled:opacity-50"
-          >
-            {batchRunning ? "実行中…" : "スマート振り分けを実行"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={batchRunning || !cacheReady}
+              onClick={() => void handleBatchAssign()}
+              className="action-btn px-3 py-2 disabled:opacity-50"
+            >
+              {batchRunning ? "実行中…" : "スマート振り分けを実行"}
+            </button>
+            <button type="button" onClick={() => void handleDiagnose()} className="action-btn px-3 py-2">
+              診断テスト
+            </button>
+          </div>
+          {diagnosisText && (
+            <pre className="overflow-x-auto rounded border border-neutral-800 bg-neutral-950 p-2 text-caption text-neutral-400 whitespace-pre-wrap">
+              {diagnosisText}
+            </pre>
+          )}
         </section>
 
         <section className="space-y-2 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">

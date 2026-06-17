@@ -1,4 +1,5 @@
 import type { ImportResult } from "@/features/files/types";
+import { formatAssignSuffix } from "@/lib/smartAssign";
 import { scanPhotoLibraryNovelai } from "@/lib/tauri";
 
 function formatNovelAiImportSummary(result: ImportResult): string {
@@ -28,11 +29,7 @@ export function formatNovelAiImportResult(result: ImportResult): string {
   return formatNovelAiImportSummary(result);
 }
 
-export function formatAssignSuffix(result: ImportResult): string {
-  const assigned = result.assignedCollectionCount ?? 0;
-  if (assigned <= 0) return "";
-  return `、${assigned} 件をコレクションに振り分け`;
-}
+export { formatAssignSuffix } from "@/lib/smartAssign";
 
 export async function runPhotoLibraryScan(
   incremental = true,

@@ -58,6 +58,7 @@ export type ImportResult = {
   novelaiCount?: number;
   duplicateCount?: number;
   assignedCollectionCount?: number;
+  assignSkipReason?: string | null;
 };
 
 export type ImportProgress = {
@@ -125,6 +126,26 @@ export type BatchAssignResult = {
   filesProcessed: number;
   assignmentsAdded: number;
   suggestionsUpdated: number;
+  skipReason?: string | null;
+  filesWithoutPrompt?: number;
+  filesWithoutCharacterTags?: number;
+};
+
+export type SmartAssignmentDiagnosis = {
+  fileId?: string | null;
+  hasPrompt: boolean;
+  promptPreview?: string | null;
+  cacheCount: number;
+  cacheReady: boolean;
+  tokenizedTags: string[];
+  matchedCharacterTags: string[];
+  skipReason?: string | null;
+};
+
+export type DanbooruCacheProgress = {
+  phase: string;
+  count: number;
+  message: string;
 };
 
 export type DanbooruIndexStatus = {

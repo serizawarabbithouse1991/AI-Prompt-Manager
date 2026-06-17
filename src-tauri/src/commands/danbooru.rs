@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::db::connection::{app_data_dir, DbState};
-use crate::models::collection::{DanbooruIndexStatus, RebuildDanbooruCacheResult};
+use crate::models::collection::{
+    DanbooruCacheProgress, DanbooruIndexStatus, RebuildDanbooruCacheResult,
+};
 use crate::services::danbooru_index::{
     self, character_cache_count, get_setting, import_danbooru_db, rebuild_character_cache,
     resolve_danbooru_db_path, SETTING_CACHE_BUILT_AT,
@@ -42,7 +44,23 @@ pub fn rebuild_danbooru_character_cache(
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let app_data = app_data_dir(&app)?;
     let db_path = resolve_danbooru_db_path(&conn, &app_data)?;
-    let cache_count = rebuild_character_cache(&conn, &db_path)?;
+    let app_handle = app.clone();
+    let cache_count = rebuild_character_cache(&conn, &db_path, Some(|phase: String, count| {
+        let message = match phase.as_str() {
+            "opening" => "Danbooru DB を開いています…".to_string(),
+            "importing" => format!("{count} 件読込中…"),
+            "done" => format!("{count} 件のキャラタグを読み込みました"),
+            _ => format!("{phase}: {count}"),
+        };
+        let _ = app_handle.emit(
+            "danbooru-cache-progress",
+            DanbooruCacheProgress {
+                phase: phase.clone(),
+                count,
+                message,
+            },
+        );
+    }))?;
     Ok(RebuildDanbooruCacheResult {
         cache_count,
         db_path: db_path.to_string_lossy().to_string(),
@@ -59,7 +77,23 @@ pub fn import_danbooru_db_file(
     let app_data = app_data_dir(&app)?;
     let source = PathBuf::from(&source_path);
     let dest = import_danbooru_db(&conn, &app_data, &source)?;
-    let cache_count = rebuild_character_cache(&conn, &dest)?;
+    let app_handle = app.clone();
+    let cache_count = rebuild_character_cache(&conn, &dest, Some(|phase: String, count| {
+        let message = match phase.as_str() {
+            "opening" => "Danbooru DB を開いています…".to_string(),
+            "importing" => format!("{count} 件読込中…"),
+            "done" => format!("{count} 件のキャラタグを読み込みました"),
+            _ => format!("{phase}: {count}"),
+        };
+        let _ = app_handle.emit(
+            "danbooru-cache-progress",
+            DanbooruCacheProgress {
+                phase: phase.clone(),
+                count,
+                message,
+            },
+        );
+    }))?;
     Ok(RebuildDanbooruCacheResult {
         cache_count,
         db_path: dest.to_string_lossy().to_string(),

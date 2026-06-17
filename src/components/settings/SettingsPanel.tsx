@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
-import type { ImportResult } from "@/features/files/types";
+import type { DanbooruCacheProgress, ImportResult } from "@/features/files/types";
 import {
   cancelPhotoLibraryScan,
   importFromSaf,
@@ -15,10 +16,12 @@ import {
   getDanbooruIndexStatus,
   rebuildDanbooruCharacterCache,
   importDanbooruDbFile,
+  diagnoseSmartAssignment,
   type DanbooruIndexStatus,
   type StorageDiagnostics,
 } from "@/lib/tauri";
-import { formatNovelAiImportResult, formatPhotoScanResult, formatAssignSuffix, runPhotoLibraryScan } from "@/lib/photoScan";
+import { formatNovelAiImportResult, formatPhotoScanResult, runPhotoLibraryScan } from "@/lib/photoScan";
+import { formatAssignSuffix, formatSkipReason } from "@/lib/smartAssign";
 import { toast } from "@/lib/toast";
 import { confirmAction } from "@/lib/confirm";
 import {
@@ -70,6 +73,8 @@ export function SettingsPanel() {
   const [storageDiagnostics, setStorageDiagnostics] = useState<StorageDiagnostics | null>(null);
   const [danbooruStatus, setDanbooruStatus] = useState<DanbooruIndexStatus | null>(null);
   const [danbooruRebuilding, setDanbooruRebuilding] = useState(false);
+  const [cacheProgress, setCacheProgress] = useState<DanbooruCacheProgress | null>(null);
+  const [diagnosisText, setDiagnosisText] = useState<string | null>(null);
 
   const isDesktop = isDesktopPlatform(platformName);
   const isMobile = isMobilePlatform(platformName);
@@ -102,10 +107,36 @@ export function SettingsPanel() {
 
   useEffect(() => {
     void refreshDanbooruStatus();
+    const unlisten = listen<DanbooruCacheProgress>("danbooru-cache-progress", (event) => {
+      setCacheProgress(event.payload);
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
   }, []);
+
+  async function handleDiagnose() {
+    try {
+      const d = await diagnoseSmartAssignment();
+      const lines = [
+        `ファイル: ${d.fileId ?? "—"}`,
+        `プロンプト: ${d.hasPrompt ? d.promptPreview ?? "あり" : "なし"}`,
+        `辞書: ${d.cacheReady ? `${d.cacheCount.toLocaleString()} タグ` : "未構築"}`,
+        `マッチ: ${d.matchedCharacterTags.join(", ") || "なし"}`,
+      ];
+      if (d.skipReason) {
+        lines.push(`理由: ${formatSkipReason(d.skipReason)}`);
+      }
+      setDiagnosisText(lines.join("\n"));
+    } catch (e) {
+      setLastResult(String(e));
+      toast(String(e), "error");
+    }
+  }
 
   async function handleRebuildDanbooruCache() {
     setDanbooruRebuilding(true);
+    setCacheProgress({ phase: "opening", count: 0, message: "開始中…" });
     try {
       const result = await rebuildDanbooruCharacterCache();
       await refreshDanbooruStatus();
@@ -116,6 +147,7 @@ export function SettingsPanel() {
       toast(String(e), "error");
     } finally {
       setDanbooruRebuilding(false);
+      setCacheProgress(null);
     }
   }
 
@@ -128,6 +160,7 @@ export function SettingsPanel() {
     if (paths.length === 0) return;
 
     setDanbooruRebuilding(true);
+    setCacheProgress({ phase: "opening", count: 0, message: "開始中…" });
     try {
       const result = await importDanbooruDbFile(paths[0]);
       await refreshDanbooruStatus();
@@ -138,6 +171,7 @@ export function SettingsPanel() {
       toast(String(e), "error");
     } finally {
       setDanbooruRebuilding(false);
+      setCacheProgress(null);
     }
   }
 
@@ -484,6 +518,19 @@ export function SettingsPanel() {
               ? " デフォルトは iCloud の NovelAI フォルダ内の danbooru2023.db です。"
               : " iOS では DB ファイルをアプリへインポートしてください。"}
           </p>
+          {danbooruStatus && !danbooruStatus.cacheReady && (
+            <p className="rounded border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">
+              辞書が未構築です。DB をインポート（または検出）後、「辞書を更新」を実行してください。更新完了までスマート振り分けは動作しません。
+            </p>
+          )}
+          {cacheProgress && (
+            <div className="space-y-1">
+              <p className="text-xs text-neutral-400">{cacheProgress.message}</p>
+              {cacheProgress.count > 0 && (
+                <p className="text-xs text-neutral-500">{cacheProgress.count.toLocaleString()} 件処理済み</p>
+              )}
+            </div>
+          )}
           {danbooruStatus ? (
             <dl className="space-y-1 text-xs text-neutral-400">
               <div className="flex justify-between gap-4">
@@ -532,7 +579,15 @@ export function SettingsPanel() {
             <button type="button" onClick={() => void refreshDanbooruStatus()} className="action-btn">
               状態を更新
             </button>
+            <button type="button" onClick={() => void handleDiagnose()} className="action-btn">
+              振り分け診断テスト
+            </button>
           </div>
+          {diagnosisText && (
+            <pre className="overflow-x-auto rounded border border-neutral-800 bg-neutral-950 p-2 text-xs text-neutral-400 whitespace-pre-wrap">
+              {diagnosisText}
+            </pre>
+          )}
         </section>
 
         {isDesktop && (

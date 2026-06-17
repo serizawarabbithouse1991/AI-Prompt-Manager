@@ -4,7 +4,7 @@ use crate::db::connection::{app_data_dir, DbState};
 use crate::db::repositories::collections as collections_repo;
 use crate::models::collection::{
     BatchAssignResult, CharacterSuggestion, Collection, CreateCollectionPayload,
-    CreateSmartCollectionPayload, UpdateCollectionKeywordsPayload,
+    CreateSmartCollectionPayload, SmartAssignmentDiagnosis, UpdateCollectionKeywordsPayload,
 };
 use crate::models::file::FileEntry;
 use crate::services::character_matcher;
@@ -49,6 +49,15 @@ pub fn update_collection_keywords(
         &payload.collection_id,
         &payload.match_keywords,
     )
+}
+
+#[tauri::command]
+pub fn diagnose_smart_assignment(
+    state: State<'_, DbState>,
+    file_id: Option<String>,
+) -> Result<SmartAssignmentDiagnosis, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    character_matcher::diagnose_smart_assignment(&conn, file_id.as_deref())
 }
 
 #[tauri::command]

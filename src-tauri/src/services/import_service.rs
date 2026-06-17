@@ -215,6 +215,11 @@ fn import_file(
                 character_matcher::assign_smart_collections_for_file(conn, app_data, &entry.id)
             {
                 result.assigned_collection_count += assign.assigned_count;
+                if assign.assigned_count == 0 {
+                    if let Some(reason) = assign.skip_reason {
+                        result.assign_skip_reason = Some(reason);
+                    }
+                }
             }
         }
         Ok(ImportImageOutcome::Skipped) => {

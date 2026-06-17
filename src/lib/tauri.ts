@@ -12,6 +12,8 @@ import type {
   ImportResult,
   ScanResult,
   SearchFilters,
+  SmartAssignmentDiagnosis,
+  DanbooruCacheProgress,
   SpecialPaths,
   RebuildDanbooruCacheResult,
 } from "@/features/files/types";
@@ -257,6 +259,10 @@ export async function batchAssignSmartCollections(): Promise<BatchAssignResult> 
   return invoke<BatchAssignResult>("batch_assign_smart_collections");
 }
 
+export async function diagnoseSmartAssignment(fileId?: string): Promise<SmartAssignmentDiagnosis> {
+  return invoke<SmartAssignmentDiagnosis>("diagnose_smart_assignment", { fileId: fileId ?? null });
+}
+
 export async function listCharacterSuggestions(limit = 50): Promise<CharacterSuggestion[]> {
   return invoke<CharacterSuggestion[]>("list_character_suggestions", { limit });
 }
@@ -309,4 +315,4 @@ export async function backupDatabase(): Promise<string> {
   return invoke<string>("backup_database");
 }
 
-export type { Collection, SearchFilters, BackfillResult, CharacterSuggestion, BatchAssignResult, DanbooruIndexStatus, RebuildDanbooruCacheResult };
+export type { Collection, SearchFilters, BackfillResult, CharacterSuggestion, BatchAssignResult, DanbooruIndexStatus, RebuildDanbooruCacheResult, SmartAssignmentDiagnosis, DanbooruCacheProgress };
