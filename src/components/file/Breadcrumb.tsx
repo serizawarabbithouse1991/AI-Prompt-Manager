@@ -1,4 +1,5 @@
 import { useFileStore } from "@/features/files/store";
+import { isMobilePlatform } from "@/lib/platform";
 import { splitPathSegments, pathFromSegments } from "@/features/files/viewUtils";
 
 export function Breadcrumb() {
@@ -7,6 +8,12 @@ export function Breadcrumb() {
   const searchQuery = useFileStore((s) => s.searchQuery);
   const navigateTo = useFileStore((s) => s.navigateTo);
   const specialPaths = useFileStore((s) => s.specialPaths);
+  const platformName = useFileStore((s) => s.platformName);
+  const selectedCollectionId = useFileStore((s) => s.selectedCollectionId);
+  const collections = useFileStore((s) => s.collections);
+  const setSelectedCollectionId = useFileStore((s) => s.setSelectedCollectionId);
+  const setViewMode = useFileStore((s) => s.setViewMode);
+  const isMobile = isMobilePlatform(platformName);
 
   if (viewMode === "search") {
     return (
@@ -25,12 +32,27 @@ export function Breadcrumb() {
   }
 
   if (viewMode === "collections") {
-    const collectionId = useFileStore.getState().selectedCollectionId;
-    const collections = useFileStore.getState().collections;
-    const name = collections.find((c) => c.id === collectionId)?.name ?? "コレクション";
+    const name = collections.find((c) => c.id === selectedCollectionId)?.name ?? "コレクション";
+    if (selectedCollectionId && isMobile) {
+      return (
+        <div className="flex items-center gap-2 px-2 py-1.5 sm:px-4 sm:py-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCollectionId(null);
+              void setViewMode("collections");
+            }}
+            className="shrink-0 text-sm text-blue-400"
+          >
+            ← コレクション
+          </button>
+          <span className="truncate text-caption text-neutral-400">{name}</span>
+        </div>
+      );
+    }
     return (
       <div className="px-2 py-1.5 text-caption text-neutral-400 sm:px-4 sm:py-2">
-        {collectionId ? name : "コレクション"}
+        {selectedCollectionId ? name : "コレクション"}
       </div>
     );
   }

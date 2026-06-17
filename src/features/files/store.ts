@@ -4,6 +4,7 @@ import type {
   Collection,
   FileEntry,
   FileFilter,
+  GridDensity,
   LayoutMode,
   ImportProgress,
   RecentFolder,
@@ -30,6 +31,11 @@ import { getPlatform, isIOSPlatform, isMobilePlatform } from "@/lib/platform";
 import { getDefaultBrowsePath, isNovelAiPath } from "@/lib/browsePaths";
 import { loadAutoPhotoScanEnabled } from "@/lib/photoScanPrefs";
 import { formatPhotoScanResult, runPhotoLibraryScan } from "@/lib/photoScan";
+import {
+  applyGridColumnsCss,
+  clampGridColumns,
+  GRID_DENSITY_COLUMNS,
+} from "@/lib/gridUtils";
 
 const BOOKMARKS_KEY = "ai-fm-bookmarks";
 const RECENT_FOLDERS_KEY = "ai-fm-recent-folders";
@@ -42,6 +48,7 @@ type ViewPrefs = {
   filterTagId: string | null;
   layoutMode: LayoutMode;
   searchScope: SearchScope;
+  gridColumns: number;
 };
 
 function loadViewPrefs(): Partial<ViewPrefs> {
@@ -177,7 +184,22 @@ type FileStore = {
   removeFilesFromList: (fileIds: string[]) => void;
   addBookmark: (label: string, path: string) => void;
   removeBookmark: (id: string) => void;
+  gridColumns: number;
+  setGridColumns: (columns: number) => void;
+  setGridDensity: (density: GridDensity) => void;
 };
+
+function getViewPrefsFromState(s: FileStore): ViewPrefs {
+  return {
+    sortField: s.sortField,
+    sortOrder: s.sortOrder,
+    fileFilter: s.fileFilter,
+    filterTagId: s.filterTagId,
+    layoutMode: s.layoutMode,
+    searchScope: s.searchScope,
+    gridColumns: s.gridColumns,
+  };
+}
 
 function findFile(files: FileEntry[], id: string | null): FileEntry | null {
   if (!id) return null;
@@ -185,6 +207,8 @@ function findFile(files: FileEntry[], id: string | null): FileEntry | null {
 }
 
 const initialViewPrefs = loadViewPrefs();
+const initialGridColumns = initialViewPrefs.gridColumns ?? 4;
+applyGridColumnsCss(initialGridColumns);
 
 export const useFileStore = create<FileStore>((set, get) => ({
   specialPaths: null,
@@ -225,79 +249,48 @@ export const useFileStore = create<FileStore>((set, get) => ({
   searchLoadingMore: false,
   bookmarks: loadBookmarks(),
   recentFolders: loadRecentFolders(),
-  setPlatformName: (name) => set({ platformName: name }),
+  gridColumns: initialGridColumns,
+  setPlatformName: (name) => {
+    const isMobile = isMobilePlatform(name);
+    const clamped = clampGridColumns(get().gridColumns, isMobile);
+    applyGridColumnsCss(clamped);
+    set({ platformName: name, gridColumns: clamped });
+    saveViewPrefs(getViewPrefsFromState(get()));
+  },
   setInspectorOpen: (open) => set({ inspectorOpen: open }),
   setSortField: (field) => {
     set({ sortField: field });
-    const s = get();
-    saveViewPrefs({
-      sortField: field,
-      sortOrder: s.sortOrder,
-      fileFilter: s.fileFilter,
-      filterTagId: s.filterTagId,
-      layoutMode: s.layoutMode,
-      searchScope: s.searchScope,
-    });
+    saveViewPrefs(getViewPrefsFromState(get()));
   },
   setSortOrder: (order) => {
     set({ sortOrder: order });
-    const s = get();
-    saveViewPrefs({
-      sortField: s.sortField,
-      sortOrder: order,
-      fileFilter: s.fileFilter,
-      filterTagId: s.filterTagId,
-      layoutMode: s.layoutMode,
-      searchScope: s.searchScope,
-    });
+    saveViewPrefs(getViewPrefsFromState(get()));
   },
   setFileFilter: (filter) => {
     set({ fileFilter: filter });
-    const s = get();
-    saveViewPrefs({
-      sortField: s.sortField,
-      sortOrder: s.sortOrder,
-      fileFilter: filter,
-      filterTagId: s.filterTagId,
-      layoutMode: s.layoutMode,
-      searchScope: s.searchScope,
-    });
+    saveViewPrefs(getViewPrefsFromState(get()));
   },
   setFilterTagId: (tagId) => {
     set({ filterTagId: tagId });
-    const s = get();
-    saveViewPrefs({
-      sortField: s.sortField,
-      sortOrder: s.sortOrder,
-      fileFilter: s.fileFilter,
-      filterTagId: tagId,
-      layoutMode: s.layoutMode,
-      searchScope: s.searchScope,
-    });
+    saveViewPrefs(getViewPrefsFromState(get()));
   },
   setLayoutMode: (mode) => {
     set({ layoutMode: mode });
-    const s = get();
-    saveViewPrefs({
-      sortField: s.sortField,
-      sortOrder: s.sortOrder,
-      fileFilter: s.fileFilter,
-      filterTagId: s.filterTagId,
-      layoutMode: mode,
-      searchScope: s.searchScope,
-    });
+    saveViewPrefs(getViewPrefsFromState(get()));
+  },
+  setGridColumns: (columns) => {
+    const clamped = clampGridColumns(columns, isMobilePlatform(get().platformName));
+    applyGridColumnsCss(clamped);
+    set({ gridColumns: clamped });
+    saveViewPrefs(getViewPrefsFromState(get()));
+  },
+  setGridDensity: (density) => {
+    const cols = GRID_DENSITY_COLUMNS[density];
+    get().setGridColumns(cols);
   },
   setSearchScope: (scope) => {
     set({ searchScope: scope });
-    const s = get();
-    saveViewPrefs({
-      sortField: s.sortField,
-      sortOrder: s.sortOrder,
-      fileFilter: s.fileFilter,
-      filterTagId: s.filterTagId,
-      layoutMode: s.layoutMode,
-      searchScope: scope,
-    });
+    saveViewPrefs(getViewPrefsFromState(get()));
   },
   setSearchSourceApp: (value) => {
     set({ searchSourceApp: value });
@@ -417,14 +410,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
         const startPath = getDefaultBrowsePath(specialPaths, platformName);
         if (isNovelAiPath(startPath, specialPaths)) {
           set({ fileFilter: "images" });
-          saveViewPrefs({
-            sortField: get().sortField,
-            sortOrder: get().sortOrder,
-            fileFilter: "images",
-            filterTagId: get().filterTagId,
-            layoutMode: get().layoutMode,
-            searchScope: get().searchScope,
-          });
+          saveViewPrefs(getViewPrefsFromState(get()));
         }
         await get().navigateTo(startPath);
       }
@@ -473,16 +459,11 @@ export const useFileStore = create<FileStore>((set, get) => ({
     };
     if (isNovelAiPath(path, specialPaths)) {
       updates.fileFilter = "images";
-      saveViewPrefs({
-        sortField: get().sortField,
-        sortOrder: get().sortOrder,
-        fileFilter: "images",
-        filterTagId: get().filterTagId,
-        layoutMode: get().layoutMode,
-        searchScope: get().searchScope,
-      });
     }
     set(updates);
+    if (isNovelAiPath(path, specialPaths)) {
+      saveViewPrefs(getViewPrefsFromState(get()));
+    }
     await get().loadDirectory(path);
   },
 
@@ -579,8 +560,16 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   setViewMode: async (mode) => {
-    const { selectedFileId, metadata, tags, inspectorOpen } = get();
-    set({ viewMode: mode, loading: true, error: null, selectedFileIds: [], selectionMode: false });
+    const { selectedFileId, metadata, tags } = get();
+    set({
+      viewMode: mode,
+      loading: true,
+      error: null,
+      selectedFileIds: [],
+      selectionMode: false,
+      inspectorOpen: false,
+      lightboxFileId: null,
+    });
     try {
       if (mode === "favorites") {
         const files = await listFavorites();
@@ -592,7 +581,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
           selectedFile,
           metadata: selectedFile ? metadata : null,
           tags: selectedFile ? tags : [],
-          inspectorOpen: selectedFile ? inspectorOpen : false,
+          inspectorOpen: false,
         });
         return;
       }
@@ -606,7 +595,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
           selectedFile,
           metadata: selectedFile ? metadata : null,
           tags: selectedFile ? tags : [],
-          inspectorOpen: selectedFile ? inspectorOpen : false,
+          inspectorOpen: false,
         });
         return;
       }

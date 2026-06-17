@@ -29,18 +29,18 @@ export function AppShell() {
   }
 
   return (
-    <div className="app-shell grid grid-rows-[auto_auto_auto_minmax(0,1fr)_auto] bg-neutral-950 text-neutral-100">
+    <div className="app-shell flex flex-col bg-neutral-950 text-neutral-100">
       <Toolbar />
       <ScanProgressBanner />
       <StorageBanner />
-      <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[240px_1fr_360px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[240px_1fr_360px]">
         <Sidebar />
-        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden safe-px">
+        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden safe-px pb-[calc(3.75rem+var(--safe-bottom))] lg:pb-0">
           <Breadcrumb />
           <ViewControls />
           <FilterPanel />
           <SelectionBar />
-          {renderMain()}
+          <div className="min-h-0 flex-1 overflow-hidden">{renderMain()}</div>
         </main>
         <Inspector />
       </div>

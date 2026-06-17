@@ -154,6 +154,8 @@ export function Sidebar() {
 export function BottomNav() {
   const setViewMode = useFileStore((s) => s.setViewMode);
   const setSelectedCollectionId = useFileStore((s) => s.setSelectedCollectionId);
+  const setInspectorOpen = useFileStore((s) => s.setInspectorOpen);
+  const setLightboxFileId = useFileStore((s) => s.setLightboxFileId);
   const viewMode = useFileStore((s) => s.viewMode);
 
   const items = [
@@ -163,16 +165,20 @@ export function BottomNav() {
     { id: "settings", label: "設定", mode: "settings" as const, Icon: IconSettings },
   ];
 
+  function navigate(mode: (typeof items)[number]["mode"]) {
+    setInspectorOpen(false);
+    setLightboxFileId(null);
+    if (mode === "collections") setSelectedCollectionId(null);
+    void setViewMode(mode);
+  }
+
   return (
-    <nav className="flex shrink-0 border-t border-neutral-800 bg-neutral-950 pb-[var(--safe-bottom)] safe-px lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-[55] flex shrink-0 border-t border-neutral-800 bg-neutral-950/95 pb-[var(--safe-bottom)] backdrop-blur safe-px lg:hidden">
       {items.map((item) => (
         <button
           key={item.id}
           type="button"
-          onClick={() => {
-            if (item.mode === "collections") setSelectedCollectionId(null);
-            void setViewMode(item.mode);
-          }}
+          onClick={() => navigate(item.mode)}
           aria-current={viewMode === item.mode ? "page" : undefined}
           className={[
             "flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 py-2 text-micro focus-ring",
