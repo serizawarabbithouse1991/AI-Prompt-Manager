@@ -23,7 +23,7 @@ export function ViewControls() {
   if (viewMode === "settings") return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-neutral-800 px-4 py-2">
+    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto border-b border-neutral-800 px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:px-4 sm:py-2 [&::-webkit-scrollbar]:hidden">
       <label className="flex items-center gap-1 text-xs text-neutral-500">
         並び
         <select
@@ -81,7 +81,7 @@ export function ViewControls() {
         </select>
       )}
 
-      <div className="ml-auto flex gap-1">
+      <div className="ml-auto flex shrink-0 gap-1">
         {(Object.keys(LAYOUT_LABELS) as LayoutMode[]).map((mode) => (
           <button
             key={mode}

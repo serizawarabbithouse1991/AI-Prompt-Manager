@@ -10,22 +10,37 @@ export function Breadcrumb() {
 
   if (viewMode === "search") {
     return (
-      <div className="truncate px-4 py-2 text-xs text-neutral-400">
+      <div className="truncate px-2 py-1.5 text-xs text-neutral-400 sm:px-4 sm:py-2">
         検索: {searchQuery}
       </div>
     );
   }
 
   if (viewMode === "favorites") {
-    return <div className="px-4 py-2 text-xs text-neutral-400">お気に入り</div>;
+    return <div className="px-2 py-1.5 text-xs text-neutral-400 sm:px-4 sm:py-2">お気に入り</div>;
   }
 
   if (viewMode === "ai-library") {
-    return <div className="px-4 py-2 text-xs text-neutral-400">AI Library</div>;
+    return <div className="px-2 py-1.5 text-caption text-neutral-400 sm:px-4 sm:py-2">AI Library</div>;
+  }
+
+  if (viewMode === "collections") {
+    const collectionId = useFileStore.getState().selectedCollectionId;
+    const collections = useFileStore.getState().collections;
+    const name = collections.find((c) => c.id === collectionId)?.name ?? "コレクション";
+    return (
+      <div className="px-2 py-1.5 text-caption text-neutral-400 sm:px-4 sm:py-2">
+        {collectionId ? name : "コレクション"}
+      </div>
+    );
+  }
+
+  if (viewMode === "duplicates") {
+    return <div className="px-2 py-1.5 text-caption text-neutral-400 sm:px-4 sm:py-2">重複ファイル</div>;
   }
 
   if (viewMode === "settings") {
-    return <div className="px-4 py-2 text-xs text-neutral-400">設定</div>;
+    return <div className="px-2 py-1.5 text-xs text-neutral-400 sm:px-4 sm:py-2">設定</div>;
   }
 
   const { sep, segments } = splitPathSegments(currentPath);
@@ -37,7 +52,7 @@ export function Breadcrumb() {
         : "";
 
   return (
-    <nav className="flex flex-wrap items-center gap-1 px-4 py-2 text-xs text-neutral-400">
+    <nav className="flex flex-wrap items-center gap-1 px-2 py-1.5 text-xs text-neutral-400 sm:px-4 sm:py-2">
       {segments.map((segment, index) => {
         const pathSegments = segments.slice(0, index + 1);
         let targetPath = pathFromSegments(pathSegments, sep);
@@ -51,7 +66,7 @@ export function Breadcrumb() {
         const isLast = index === segments.length - 1;
         const label =
           specialPaths && targetPath === specialPaths.home
-            ? "Home"
+            ? "ホーム"
             : segment;
 
         return (

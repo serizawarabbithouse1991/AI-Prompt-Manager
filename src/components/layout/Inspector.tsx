@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFileStore } from "@/features/files/store";
 import { useSelectedFileDetails } from "@/features/files/hooks";
 import { FilePreview } from "@/components/file/FilePreview";
@@ -17,6 +17,10 @@ import {
 import { shareFileEntry } from "@/lib/shareFile";
 import { open } from "@tauri-apps/plugin-dialog";
 import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
+import { confirmAction } from "@/lib/confirm";
+import { toast } from "@/lib/toast";
+import { addFileToCollection, listCollections } from "@/lib/tauri";
+import { IconStar } from "@/components/ui/Icons";
 
 export function Inspector() {
   const selectedFile = useFileStore((s) => s.selectedFile);
@@ -27,10 +31,19 @@ export function Inspector() {
   const platformName = useFileStore((s) => s.platformName);
   const inspectorOpen = useFileStore((s) => s.inspectorOpen);
   const setInspectorOpen = useFileStore((s) => s.setInspectorOpen);
+  const collections = useFileStore((s) => s.collections);
+  const setCollections = useFileStore((s) => s.setCollections);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState("");
+  const [collectionMenuOpen, setCollectionMenuOpen] = useState(false);
 
   useSelectedFileDetails();
+
+  useEffect(() => {
+    if (collections.length === 0) {
+      void listCollections().then(setCollections).catch(() => setCollections([]));
+    }
+  }, [collections.length, setCollections]);
 
   const isDesktop = isDesktopPlatform(platformName);
   const isMobile = isMobilePlatform(platformName);
@@ -58,21 +71,45 @@ export function Inspector() {
   }
 
   async function handleTrash() {
-    if (!confirm(`「${selectedFile!.displayName}」をゴミ箱へ移動しますか？`)) return;
+    const ok = await confirmAction({
+      title: "ゴミ箱へ移動",
+      message: `「${selectedFile!.displayName}」をゴミ箱へ移動しますか？`,
+      confirmLabel: "移動",
+      danger: true,
+    });
+    if (!ok) return;
     await trashFile(selectedFile!.absolutePath);
     useFileStore.getState().selectFile(null);
     await refresh();
+    toast("ゴミ箱へ移動しました", "success");
   }
 
   async function handleRemoveFromLibrary() {
-    if (!confirm(`「${selectedFile!.displayName}」をライブラリから削除しますか？`)) return;
+    const ok = await confirmAction({
+      title: "ライブラリから削除",
+      message: `「${selectedFile!.displayName}」をライブラリから削除しますか？`,
+      confirmLabel: "削除",
+      danger: true,
+    });
+    if (!ok) return;
     await removeFromLibrary(selectedFile!.id);
     useFileStore.getState().selectFile(null);
     await refresh();
+    toast("ライブラリから削除しました", "success");
+  }
+
+  async function handleAddToCollection(collectionId: string) {
+    setCollectionMenuOpen(false);
+    try {
+      await addFileToCollection(collectionId, selectedFile!.id);
+      toast("コレクションに追加しました", "success");
+    } catch (e) {
+      toast(String(e), "error");
+    }
   }
 
   const content = (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4 p-3 sm:p-4">
       <FilePreview file={selectedFile} />
       <div className="space-y-1">
         <h2 className="truncate text-sm font-medium">{selectedFile.displayName}</h2>
@@ -106,10 +143,36 @@ export function Inspector() {
         <button
           type="button"
           onClick={() => void handleFavorite()}
-          className="action-btn"
+          className="action-btn flex items-center gap-1"
         >
-          {selectedFile.isFavorite ? "★ お気に入り解除" : "☆ お気に入り"}
+          <IconStar className="h-3.5 w-3.5" filled={selectedFile.isFavorite} />
+          {selectedFile.isFavorite ? "お気に入り解除" : "お気に入り"}
         </button>
+        {!selectedFile.isDirectory && collections.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setCollectionMenuOpen((v) => !v)}
+              className="action-btn"
+            >
+              コレクションに追加
+            </button>
+            {collectionMenuOpen && (
+              <div className="absolute left-0 top-full z-20 mt-1 max-h-40 min-w-[160px] overflow-auto rounded border border-neutral-700 bg-neutral-900 py-1 shadow-lg">
+                {collections.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => void handleAddToCollection(c.id)}
+                    className="block w-full px-3 py-1.5 text-left text-caption hover:bg-neutral-800"
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {isDesktop && !selectedFile.isDirectory && (
           <>
             <button
@@ -202,8 +265,16 @@ export function Inspector() {
         </div>
       </aside>
       {inspectorOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950 lg:hidden">
-          <div className="flex shrink-0 items-center border-b border-neutral-800 p-3">
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-neutral-950 animate-fade-in lg:hidden"
+          style={{
+            paddingTop: "var(--safe-top)",
+            paddingBottom: "var(--safe-bottom)",
+            paddingLeft: "var(--safe-left)",
+            paddingRight: "var(--safe-right)",
+          }}
+        >
+          <div className="flex shrink-0 items-center border-b border-neutral-800 p-2 sm:p-3">
             <button
               type="button"
               onClick={() => setInspectorOpen(false)}
@@ -212,7 +283,9 @@ export function Inspector() {
               ← 戻る
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{content}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain animate-slide-in-right">
+            {content}
+          </div>
         </div>
       )}
     </>

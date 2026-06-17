@@ -3,8 +3,9 @@ use rusqlite::{params, Connection, Row};
 use crate::db::connection::now_iso;
 use crate::models::file::{detect_file_kind, detect_mime, FileEntry};
 use crate::services::hash::path_to_id;
+use crate::services::library_reconcile::{ai_library_path_patterns, normalize_storage_path};
 
-fn row_to_file(row: &Row) -> Result<FileEntry, rusqlite::Error> {
+pub(crate) fn row_to_file(row: &Row) -> Result<FileEntry, rusqlite::Error> {
     Ok(FileEntry {
         id: row.get("id")?,
         parent_id: row.get("parent_id")?,
@@ -26,6 +27,9 @@ fn row_to_file(row: &Row) -> Result<FileEntry, rusqlite::Error> {
         is_deleted: row.get::<_, i64>("is_deleted")? != 0,
         thumbnail_path: None,
         tag_ids: Vec::new(),
+        ai_model: None,
+        ai_steps: None,
+        prompt_preview: None,
     })
 }
 
@@ -101,6 +105,24 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<FileEntry>, Strin
     Ok(None)
 }
 
+pub fn find_active_by_content_hash(
+    conn: &Connection,
+    content_hash: &str,
+) -> Result<Option<FileEntry>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT * FROM files WHERE content_hash = ?1 AND is_deleted = 0 AND is_directory = 0 LIMIT 1",
+        )
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt
+        .query(params![content_hash])
+        .map_err(|e| e.to_string())?;
+    if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        return Ok(Some(row_to_file(&row).map_err(|e| e.to_string())?));
+    }
+    Ok(None)
+}
+
 pub fn list_favorites(conn: &Connection) -> Result<Vec<FileEntry>, String> {
     let mut stmt = conn
         .prepare("SELECT * FROM files WHERE is_favorite = 1 AND is_deleted = 0 ORDER BY display_name")
@@ -111,17 +133,69 @@ pub fn list_favorites(conn: &Connection) -> Result<Vec<FileEntry>, String> {
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+pub fn count_ai_library(conn: &Connection, ai_library_prefix: &str) -> Result<u32, String> {
+    let patterns = ai_library_path_patterns(ai_library_prefix);
+    if patterns.is_empty() {
+        return Ok(0);
+    }
+    let clause = patterns
+        .iter()
+        .map(|_| "absolute_path LIKE ?")
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let sql = format!(
+        "SELECT COUNT(DISTINCT id) FROM files WHERE ({clause}) AND is_deleted = 0 AND is_directory = 0"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let params: Vec<&str> = patterns.iter().map(String::as_str).collect();
+    stmt.query_row(rusqlite::params_from_iter(params), |row| row.get(0))
+        .map_err(|e| e.to_string())
+}
+
+pub fn find_active_by_path_variants(
+    conn: &Connection,
+    path: &std::path::Path,
+) -> Result<Option<FileEntry>, String> {
+    let path_str = path.to_string_lossy();
+    let mut candidates = vec![path_str.to_string()];
+    let normalized = normalize_storage_path(&path_str);
+    if normalized != path_str {
+        candidates.push(normalized.clone());
+    }
+    if !path_str.starts_with("/private") {
+        candidates.push(format!("/private{path_str}"));
+    }
+
+    for candidate in candidates {
+        if let Some(entry) = file_from_path(conn, &candidate)? {
+            return Ok(Some(entry));
+        }
+    }
+    Ok(None)
+}
+
 pub fn list_ai_library(conn: &Connection, ai_library_prefix: &str) -> Result<Vec<FileEntry>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT * FROM files WHERE absolute_path LIKE ?1 AND is_deleted = 0 AND is_directory = 0 ORDER BY display_name",
-        )
-        .map_err(|e| e.to_string())?;
-    let pattern = format!("{}%", ai_library_prefix);
-    let rows = stmt
-        .query_map(params![pattern], |row| row_to_file(row))
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    let patterns = ai_library_path_patterns(ai_library_prefix);
+    let mut by_id: std::collections::HashMap<String, FileEntry> = std::collections::HashMap::new();
+
+    for pattern in patterns {
+        let mut stmt = conn
+            .prepare(
+                "SELECT * FROM files WHERE absolute_path LIKE ?1 AND is_deleted = 0 AND is_directory = 0 ORDER BY display_name",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![pattern], |row| row_to_file(row))
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let entry = row.map_err(|e| e.to_string())?;
+            by_id.entry(entry.id.clone()).or_insert(entry);
+        }
+    }
+
+    let mut files: Vec<FileEntry> = by_id.into_values().collect();
+    files.sort_by(|a, b| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()));
+    Ok(files)
 }
 
 pub fn get_file_tag_ids(conn: &Connection, file_id: &str) -> Result<Vec<String>, String> {
@@ -156,7 +230,36 @@ pub fn merge_db_info(conn: &Connection, entries: &mut [FileEntry]) -> Result<(),
 
 pub fn attach_db_metadata(conn: &Connection, files: &mut [FileEntry]) -> Result<(), String> {
     merge_db_info(conn, files)?;
-    attach_thumbnail_paths(conn, files)
+    attach_thumbnail_paths(conn, files)?;
+    attach_ai_summaries(conn, files)
+}
+
+pub fn attach_ai_summaries(conn: &Connection, files: &mut [FileEntry]) -> Result<(), String> {
+    for file in files.iter_mut() {
+        if file.is_directory {
+            continue;
+        }
+        let result: Option<(Option<String>, Option<i64>, Option<String>)> = conn
+            .query_row(
+                "SELECT model, steps, positive_prompt FROM ai_generation_metadata WHERE file_id = ?1 LIMIT 1",
+                params![file.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .ok();
+        if let Some((model, steps, prompt)) = result {
+            file.ai_model = model;
+            file.ai_steps = steps;
+            file.prompt_preview = prompt.map(|p| {
+                let trimmed = p.trim();
+                if trimmed.chars().count() > 80 {
+                    format!("{}…", trimmed.chars().take(80).collect::<String>())
+                } else {
+                    trimmed.to_string()
+                }
+            });
+        }
+    }
+    Ok(())
 }
 
 pub fn set_favorite_with_upsert(
@@ -261,6 +364,9 @@ pub fn build_entry_from_metadata(
         is_deleted: false,
         thumbnail_path: None,
         tag_ids: Vec::new(),
+        ai_model: None,
+        ai_steps: None,
+        prompt_preview: None,
     })
 }
 
@@ -282,6 +388,15 @@ pub fn attach_thumbnail_paths(conn: &Connection, files: &mut [FileEntry]) -> Res
 }
 
 pub fn search_files(conn: &Connection, query: &str) -> Result<Vec<FileEntry>, String> {
+    if let Ok(files) = search_files_fts(conn, query, None, None, 200, 0) {
+        if !files.is_empty() {
+            return Ok(files);
+        }
+    }
+    search_files_like(conn, query)
+}
+
+pub fn search_files_like(conn: &Connection, query: &str) -> Result<Vec<FileEntry>, String> {
     let pattern = format!("%{}%", query);
     let mut stmt = conn
         .prepare(
@@ -296,6 +411,7 @@ pub fn search_files(conn: &Connection, query: &str) -> Result<Vec<FileEntry>, St
               m.model LIKE ?1 OR t.name LIKE ?1
             )
             ORDER BY f.display_name
+            LIMIT 200
             "#,
         )
         .map_err(|e| e.to_string())?;
@@ -303,4 +419,109 @@ pub fn search_files(conn: &Connection, query: &str) -> Result<Vec<FileEntry>, St
         .query_map(params![pattern], |row| row_to_file(row))
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn search_files_fts(
+    conn: &Connection,
+    query: &str,
+    source_app: Option<&str>,
+    model_filter: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<FileEntry>, String> {
+    let fts_query = query
+        .split_whitespace()
+        .map(|w| format!("\"{}\"", w.replace('"', "")))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if fts_query.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let model_pattern = model_filter.map(|m| format!("%{m}%"));
+    let limit = limit.max(1);
+    let offset = offset.max(0);
+
+    let mut files = match (source_app, model_pattern.as_deref()) {
+        (Some(app), Some(mp)) => {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT f.* FROM files f
+                INNER JOIN files_fts fts ON fts.file_id = f.id
+                LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                WHERE f.is_deleted = 0 AND f.is_directory = 0
+                  AND fts MATCH ?1 AND m.source_app = ?2 AND m.model LIKE ?3
+                ORDER BY f.display_name LIMIT ?4 OFFSET ?5
+                "#,
+            ).map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![fts_query, app, mp, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (Some(app), None) => {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT f.* FROM files f
+                INNER JOIN files_fts fts ON fts.file_id = f.id
+                LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                WHERE f.is_deleted = 0 AND f.is_directory = 0
+                  AND fts MATCH ?1 AND m.source_app = ?2
+                ORDER BY f.display_name LIMIT ?3 OFFSET ?4
+                "#,
+            ).map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![fts_query, app, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, Some(mp)) => {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT f.* FROM files f
+                INNER JOIN files_fts fts ON fts.file_id = f.id
+                LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                WHERE f.is_deleted = 0 AND f.is_directory = 0
+                  AND fts MATCH ?1 AND m.model LIKE ?2
+                ORDER BY f.display_name LIMIT ?3 OFFSET ?4
+                "#,
+            ).map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![fts_query, mp, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, None) => {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT f.* FROM files f
+                INNER JOIN files_fts fts ON fts.file_id = f.id
+                WHERE f.is_deleted = 0 AND f.is_directory = 0 AND fts MATCH ?1
+                ORDER BY f.display_name LIMIT ?2 OFFSET ?3
+                "#,
+            ).map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![fts_query, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+    };
+
+    attach_db_metadata(conn, &mut files)?;
+    Ok(files)
+}
+
+pub fn list_duplicate_files(conn: &Connection) -> Result<Vec<FileEntry>, String> {
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT f.* FROM files f
+            INNER JOIN (
+              SELECT content_hash FROM files
+              WHERE content_hash IS NOT NULL AND is_deleted = 0 AND is_directory = 0
+              GROUP BY content_hash HAVING COUNT(*) > 1
+            ) d ON d.content_hash = f.content_hash
+            WHERE f.is_deleted = 0 AND f.is_directory = 0
+            ORDER BY f.content_hash, f.display_name
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| row_to_file(row))
+        .map_err(|e| e.to_string())?;
+    let mut files: Vec<FileEntry> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    attach_db_metadata(conn, &mut files)?;
+    Ok(files)
 }

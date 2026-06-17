@@ -32,7 +32,7 @@ export function FilePreview({ file, size = "inspector" }: FilePreviewProps) {
         alt={file.displayName}
         className={
           size === "inspector"
-            ? "max-h-80 w-full object-contain"
+            ? "max-h-[min(16rem,calc(45dvh-var(--safe-top)))] w-full object-contain sm:max-h-80"
             : "h-full w-full object-cover"
         }
       />

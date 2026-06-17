@@ -1,13 +1,20 @@
 import type { FileEntry, FileFilter, LayoutMode, SortField, SortOrder } from "@/features/files/types";
 
-export function filterFilesByQuery(files: FileEntry[], query: string): FileEntry[] {
+export function filterFilesByQuery(
+  files: FileEntry[],
+  query: string,
+  includeMetadata = false,
+): FileEntry[] {
   const q = query.trim().toLowerCase();
   if (!q) return files;
   return files.filter(
     (f) =>
       !f.isDirectory &&
       (f.displayName.toLowerCase().includes(q) ||
-        (f.extension?.toLowerCase().includes(q) ?? false)),
+        (f.extension?.toLowerCase().includes(q) ?? false) ||
+        (includeMetadata &&
+          ((f.promptPreview?.toLowerCase().includes(q) ?? false) ||
+            (f.aiModel?.toLowerCase().includes(q) ?? false)))),
   );
 }
 

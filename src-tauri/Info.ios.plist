@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>AI生成画像をライブラリに取り込むために写真ライブラリへのアクセスが必要です。</string>
+	<string>NovelAI 画像の自動検出と AI Library への取り込みのため、写真ライブラリへのアクセスが必要です。</string>
 	<key>UISupportsDocumentBrowser</key>
 	<true/>
 </dict>

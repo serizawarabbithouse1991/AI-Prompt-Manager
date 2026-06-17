@@ -1,15 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AIGenerationMetadata, UpdateMetadataPayload } from "@/features/metadata/types";
 import type { Tag } from "@/features/tags/types";
-import type { FileEntry, ImportResult, ScanResult, SpecialPaths } from "@/features/files/types";
+import type {
+  BackfillResult,
+  Collection,
+  FileEntry,
+  ImportProgress,
+  ImportResult,
+  ScanResult,
+  SearchFilters,
+  SpecialPaths,
+} from "@/features/files/types";
 
 export type FileRef = {
   fileId: string;
   absolutePath: string;
 };
 
-export async function listDirectory(path: string): Promise<FileEntry[]> {
-  return invoke<FileEntry[]>("list_directory", { path });
+export async function listDirectory(path: string, imagesOnly = false): Promise<FileEntry[]> {
+  return invoke<FileEntry[]>("list_directory", { path, imagesOnly });
 }
 
 export async function getSpecialPaths(): Promise<SpecialPaths> {
@@ -24,9 +33,31 @@ export async function listAiLibrary(): Promise<FileEntry[]> {
   return invoke<FileEntry[]>("list_ai_library");
 }
 
-export async function importPaths(paths: string[]): Promise<ImportResult> {
-  return invoke<ImportResult>("import_paths", { paths });
+export async function importPaths(
+  paths: string[],
+  options?: { novelaiOnly?: boolean },
+): Promise<ImportResult> {
+  return invoke<ImportResult>("import_paths", {
+    paths,
+    novelaiOnly: options?.novelaiOnly ?? false,
+  });
 }
+
+export async function scanPhotoLibraryNovelai(
+  incremental = true,
+  options?: { pngOnly?: boolean },
+): Promise<ImportResult> {
+  return invoke<ImportResult>("scan_photo_library_novelai", {
+    incremental,
+    pngOnly: options?.pngOnly ?? true,
+  });
+}
+
+export async function cancelPhotoLibraryScan(): Promise<void> {
+  return invoke("cancel_photo_library_scan");
+}
+
+export type { ImportProgress };
 
 export async function pickImportFolder(): Promise<string | null> {
   return invoke<string | null>("pick_import_folder");
@@ -111,8 +142,11 @@ export async function listFavorites(): Promise<FileEntry[]> {
   return invoke<FileEntry[]>("list_favorites");
 }
 
-export async function searchFiles(query: string): Promise<FileEntry[]> {
-  return invoke<FileEntry[]>("search_files", { query });
+export async function searchFiles(
+  query: string,
+  filters?: SearchFilters,
+): Promise<FileEntry[]> {
+  return invoke<FileEntry[]>("search_files", { query, filters: filters ?? null });
 }
 
 export async function renameFile(path: string, newName: string): Promise<FileEntry> {
@@ -161,3 +195,67 @@ export async function batchRemoveFromLibrary(fileIds: string[]): Promise<void> {
 export async function shareFileNative(path: string): Promise<void> {
   return invoke("share_file", { path });
 }
+
+export type StorageDiagnostics = {
+  appDataPath: string;
+  aiLibraryPath: string;
+  databasePath: string;
+  databaseBytes: number;
+  diskFileCount: number;
+  dbTotalCount: number;
+  dbLibraryCount: number;
+  dbFavoriteCount: number;
+  processedPhotoCount: number;
+};
+
+export type ReconcileResult = {
+  diskFileCount: number;
+  dbLibraryCount: number;
+  restoredCount: number;
+};
+
+export async function getStorageDiagnostics(): Promise<StorageDiagnostics> {
+  return invoke<StorageDiagnostics>("get_storage_diagnostics");
+}
+
+export async function reconcileAiLibrary(): Promise<ReconcileResult> {
+  return invoke<ReconcileResult>("reconcile_ai_library");
+}
+
+export async function listCollections(): Promise<Collection[]> {
+  return invoke<Collection[]>("list_collections");
+}
+
+export async function createCollection(name: string, description?: string): Promise<Collection> {
+  return invoke<Collection>("create_collection", { payload: { name, description: description ?? null } });
+}
+
+export async function deleteCollection(collectionId: string): Promise<void> {
+  return invoke("delete_collection", { collectionId });
+}
+
+export async function listCollectionFiles(collectionId: string): Promise<FileEntry[]> {
+  return invoke<FileEntry[]>("list_collection_files", { collectionId });
+}
+
+export async function addFileToCollection(collectionId: string, fileId: string): Promise<void> {
+  return invoke("add_file_to_collection", { collectionId, fileId });
+}
+
+export async function removeFileFromCollection(collectionId: string, fileId: string): Promise<void> {
+  return invoke("remove_file_from_collection", { collectionId, fileId });
+}
+
+export async function listDuplicateFiles(): Promise<FileEntry[]> {
+  return invoke<FileEntry[]>("list_duplicate_files");
+}
+
+export async function backfillContentHashes(): Promise<BackfillResult> {
+  return invoke<BackfillResult>("backfill_content_hashes");
+}
+
+export async function backupDatabase(): Promise<string> {
+  return invoke<string>("backup_database");
+}
+
+export type { Collection, SearchFilters, BackfillResult };

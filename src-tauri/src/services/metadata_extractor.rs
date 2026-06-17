@@ -126,6 +126,15 @@ pub fn extract_for_path(path: &str) -> Result<Option<AIGenerationMetadata>, Stri
     extract_from_file(path, &file_id)
 }
 
+pub fn is_novelai_metadata(meta: &AIGenerationMetadata) -> bool {
+    meta.source_app.as_deref() == Some("NovelAI")
+}
+
+pub fn detect_novelai_from_file(path: &str) -> Result<bool, String> {
+    let file_id = path_to_id(path);
+    Ok(extract_from_file(path, &file_id)?.map(|m| is_novelai_metadata(&m)).unwrap_or(false))
+}
+
 fn truncate_prompt(text: &str) -> String {
     if text.len() > 500 {
         format!("{}…", &text[..500])
@@ -244,4 +253,128 @@ fn read_exif_metadata(path: &str) -> Result<HashMap<String, String>, String> {
         }
     }
     Ok(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_novelai_metadata_detects_novelai_source() {
+        let meta = AIGenerationMetadata {
+            id: "1".to_string(),
+            file_id: "f1".to_string(),
+            source_app: Some("NovelAI".to_string()),
+            positive_prompt: Some("test".to_string()),
+            negative_prompt: None,
+            model: None,
+            sampler: None,
+            scheduler: None,
+            seed: None,
+            steps: None,
+            cfg_scale: None,
+            generation_width: None,
+            generation_height: None,
+            workflow_json: None,
+            raw_metadata_json: None,
+            created_at: None,
+            updated_at: None,
+        };
+        assert!(is_novelai_metadata(&meta));
+    }
+
+    #[test]
+    fn is_novelai_metadata_rejects_other_sources() {
+        for source in ["ComfyUI", "Stable Diffusion WebUI", "unknown"] {
+            let meta = AIGenerationMetadata {
+                id: "1".to_string(),
+                file_id: "f1".to_string(),
+                source_app: Some(source.to_string()),
+                positive_prompt: None,
+                negative_prompt: None,
+                model: None,
+                sampler: None,
+                scheduler: None,
+                seed: None,
+                steps: None,
+                cfg_scale: None,
+                generation_width: None,
+                generation_height: None,
+                workflow_json: None,
+                raw_metadata_json: None,
+                created_at: None,
+                updated_at: None,
+            };
+            assert!(!is_novelai_metadata(&meta));
+        }
+    }
+
+    fn write_test_png(path: &std::path::Path, text_chunks: &[(&str, &str)]) {
+        use png::{BitDepth, ColorType, Encoder};
+        use std::fs::File;
+        use std::io::BufWriter;
+
+        let file = File::create(path).expect("create png");
+        let writer = BufWriter::new(file);
+        let mut encoder = Encoder::new(writer, 1, 1);
+        encoder.set_color(ColorType::Rgba);
+        encoder.set_depth(BitDepth::Eight);
+        for (key, value) in text_chunks {
+            encoder
+                .add_text_chunk(key.to_string(), value.to_string())
+                .expect("add text chunk");
+        }
+        let mut png_writer = encoder.write_header().expect("write header");
+        png_writer
+            .write_image_data(&[0, 0, 0, 255])
+            .expect("write image data");
+    }
+
+    #[test]
+    fn detect_novelai_from_file_detects_comment_json() {
+        let dir = std::env::temp_dir().join(format!("novelai-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("novelai.png");
+        write_test_png(
+            &path,
+            &[(
+                "Comment",
+                r#"{"prompt":"1girl","uc":"bad","seed":123,"steps":28}"#,
+            )],
+        );
+
+        assert!(detect_novelai_from_file(&path.to_string_lossy()).expect("detect"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_novelai_from_file_rejects_plain_png() {
+        let dir = std::env::temp_dir().join(format!("plain-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("plain.png");
+        write_test_png(&path, &[]);
+
+        assert!(!detect_novelai_from_file(&path.to_string_lossy()).expect("detect"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_novelai_from_file_rejects_a1111_png() {
+        let dir = std::env::temp_dir().join(format!("a1111-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("a1111.png");
+        write_test_png(
+            &path,
+            &[(
+                "parameters",
+                "1girl\nNegative prompt: bad\nSteps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1",
+            )],
+        );
+
+        assert!(!detect_novelai_from_file(&path.to_string_lossy()).expect("detect"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { useFileStore } from "@/features/files/store";
 import { isDesktopPlatform } from "@/lib/platform";
+import { IconLibrary, IconSettings, IconStar } from "@/components/ui/Icons";
 
 const DESKTOP_ITEMS = [
-  { id: "home", label: "Home", pathKey: "home" as const },
-  { id: "desktop", label: "Desktop", pathKey: "desktop" as const },
-  { id: "downloads", label: "Downloads", pathKey: "downloads" as const },
-  { id: "pictures", label: "Pictures", pathKey: "pictures" as const },
+  { id: "home", label: "ホーム", pathKey: "home" as const },
+  { id: "desktop", label: "デスクトップ", pathKey: "desktop" as const },
+  { id: "downloads", label: "ダウンロード", pathKey: "downloads" as const },
+  { id: "pictures", label: "ピクチャ", pathKey: "pictures" as const },
 ];
 
 const COMMON_ITEMS = [
   { id: "ai-library", label: "AI Library", mode: "ai-library" as const },
-  { id: "favorites", label: "Favorites", mode: "favorites" as const },
-  { id: "settings", label: "Settings", mode: "settings" as const },
+  { id: "favorites", label: "お気に入り", mode: "favorites" as const },
+  { id: "collections", label: "コレクション", mode: "collections" as const },
+  { id: "duplicates", label: "重複", mode: "duplicates" as const },
+  { id: "settings", label: "設定", mode: "settings" as const },
 ];
 
 export function Sidebar() {
@@ -20,6 +23,7 @@ export function Sidebar() {
   const currentPath = useFileStore((s) => s.currentPath);
   const navigateTo = useFileStore((s) => s.navigateTo);
   const setViewMode = useFileStore((s) => s.setViewMode);
+  const setSelectedCollectionId = useFileStore((s) => s.setSelectedCollectionId);
   const viewMode = useFileStore((s) => s.viewMode);
   const platformName = useFileStore((s) => s.platformName);
   const bookmarks = useFileStore((s) => s.bookmarks);
@@ -28,10 +32,27 @@ export function Sidebar() {
   const removeBookmark = useFileStore((s) => s.removeBookmark);
   const [bookmarkLabel, setBookmarkLabel] = useState("");
   const isDesktop = isDesktopPlatform(platformName);
+  const isNovelAiActive =
+    viewMode === "browse" &&
+    specialPaths?.novelAi &&
+    currentPath.replace(/[/\\]+$/, "") === specialPaths.novelAi.replace(/[/\\]+$/, "");
 
   return (
     <aside className="hidden h-full overflow-auto border-r border-neutral-800 bg-neutral-950 p-3 lg:block">
       <nav className="space-y-1">
+        {isDesktop && specialPaths?.novelAi && (
+          <button
+            type="button"
+            onClick={() => void navigateTo(specialPaths.novelAi!)}
+            className={[
+              "sidebar-btn font-medium",
+              isNovelAiActive ? "bg-blue-950 text-blue-300 ring-1 ring-blue-800" : "text-blue-300",
+            ].join(" ")}
+            title={specialPaths.novelAi}
+          >
+            NovelAI (iCloud)
+          </button>
+        )}
         {isDesktop &&
           DESKTOP_ITEMS.map((item) => (
             <button
@@ -47,20 +68,15 @@ export function Sidebar() {
               {item.label}
             </button>
           ))}
-        {isDesktop && specialPaths?.novelAi && (
-          <button
-            type="button"
-            onClick={() => void navigateTo(specialPaths.novelAi!)}
-            className="sidebar-btn"
-          >
-            NovelAI (iCloud)
-          </button>
-        )}
         {COMMON_ITEMS.map((item) => (
           <button
             key={item.id}
             type="button"
-            onClick={() => void setViewMode(item.mode)}
+            onClick={() => {
+              if (item.mode === "collections") setSelectedCollectionId(null);
+              void setViewMode(item.mode);
+            }}
+            aria-current={viewMode === item.mode ? "page" : undefined}
             className={[
               "sidebar-btn",
               viewMode === item.mode ? "bg-neutral-800 text-white" : "",
@@ -73,7 +89,7 @@ export function Sidebar() {
 
       {isDesktop && recentFolders.length > 0 && (
         <div className="mt-4 space-y-1 border-t border-neutral-800 pt-3">
-          <h3 className="px-3 text-xs font-medium text-neutral-500">最近のフォルダ</h3>
+          <h3 className="px-3 text-caption font-medium text-neutral-500">最近のフォルダ</h3>
           {recentFolders.map((folder) => (
             <button
               key={folder.path}
@@ -90,13 +106,13 @@ export function Sidebar() {
 
       {isDesktop && currentPath && viewMode === "browse" && (
         <div className="mt-4 space-y-2 border-t border-neutral-800 pt-3">
-          <h3 className="px-3 text-xs font-medium text-neutral-500">ブックマーク</h3>
+          <h3 className="px-3 text-caption font-medium text-neutral-500">ブックマーク</h3>
           <div className="flex gap-1 px-1">
             <input
               value={bookmarkLabel}
               onChange={(e) => setBookmarkLabel(e.target.value)}
               placeholder="ラベル"
-              className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs"
+              className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-caption"
             />
             <button
               type="button"
@@ -122,7 +138,8 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={() => removeBookmark(bookmark.id)}
-                className="px-2 text-xs text-neutral-500 hover:text-red-400"
+                className="px-2 text-caption text-neutral-500 hover:text-red-400"
+                aria-label="ブックマークを削除"
               >
                 ×
               </button>
@@ -136,27 +153,34 @@ export function Sidebar() {
 
 export function BottomNav() {
   const setViewMode = useFileStore((s) => s.setViewMode);
+  const setSelectedCollectionId = useFileStore((s) => s.setSelectedCollectionId);
   const viewMode = useFileStore((s) => s.viewMode);
 
   const items = [
-    { id: "ai-library", label: "Library", mode: "ai-library" as const },
-    { id: "favorites", label: "Fav", mode: "favorites" as const },
-    { id: "settings", label: "設定", mode: "settings" as const },
+    { id: "ai-library", label: "Library", mode: "ai-library" as const, Icon: IconLibrary },
+    { id: "favorites", label: "お気に入り", mode: "favorites" as const, Icon: IconStar },
+    { id: "collections", label: "コレクション", mode: "collections" as const, Icon: IconLibrary },
+    { id: "settings", label: "設定", mode: "settings" as const, Icon: IconSettings },
   ];
 
   return (
-    <nav className="flex border-t border-neutral-800 bg-neutral-950 lg:hidden">
+    <nav className="flex shrink-0 border-t border-neutral-800 bg-neutral-950 pb-[var(--safe-bottom)] safe-px lg:hidden">
       {items.map((item) => (
         <button
           key={item.id}
           type="button"
-          onClick={() => void setViewMode(item.mode)}
+          onClick={() => {
+            if (item.mode === "collections") setSelectedCollectionId(null);
+            void setViewMode(item.mode);
+          }}
+          aria-current={viewMode === item.mode ? "page" : undefined}
           className={[
-            "flex-1 py-3 text-center text-xs",
+            "flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 py-2 text-micro focus-ring",
             viewMode === item.mode ? "text-blue-400" : "text-neutral-500",
           ].join(" ")}
         >
-          {item.label}
+          <item.Icon className="h-5 w-5" />
+          <span>{item.label}</span>
         </button>
       ))}
     </nav>

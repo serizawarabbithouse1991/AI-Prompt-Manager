@@ -29,6 +29,9 @@ export type FileEntry = {
   isDeleted: boolean;
   thumbnailPath?: string | null;
   tagIds?: string[];
+  aiModel?: string | null;
+  aiSteps?: number | null;
+  promptPreview?: string | null;
 };
 
 export type SpecialPaths = {
@@ -51,9 +54,29 @@ export type ImportResult = {
   imageCount: number;
   zipCount: number;
   errorCount: number;
+  skippedCount?: number;
+  novelaiCount?: number;
+  duplicateCount?: number;
 };
 
-export type ViewMode = "browse" | "search" | "favorites" | "ai-library" | "settings";
+export type ImportProgress = {
+  current: number;
+  total: number;
+  message: string;
+  phase?: "export" | "import";
+  novelaiCount?: number;
+  skippedCount?: number;
+  etaSeconds?: number | null;
+};
+
+export type ViewMode =
+  | "browse"
+  | "search"
+  | "favorites"
+  | "ai-library"
+  | "collections"
+  | "duplicates"
+  | "settings";
 
 export type SortField = "name" | "modified" | "size" | "kind";
 export type SortOrder = "asc" | "desc";
@@ -71,4 +94,32 @@ export type RecentFolder = {
   path: string;
   label: string;
   visitedAt: string;
+};
+
+export type Collection = {
+  id: string;
+  name: string;
+  description?: string | null;
+  kind: string;
+  createdAt?: string | null;
+  fileCount: number;
+};
+
+export type SearchFilters = {
+  sourceApp?: string | null;
+  model?: string | null;
+  limit?: number;
+  offset?: number;
+};
+
+export type BackfillResult = {
+  updatedCount: number;
+  skippedCount: number;
+  errorCount: number;
+};
+
+/** 将来の同期 API 用（未実装） */
+export type RemoteSyncConfig = {
+  remoteObjectPath?: string | null;
+  enabled?: boolean;
 };

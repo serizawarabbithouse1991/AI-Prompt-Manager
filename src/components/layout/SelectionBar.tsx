@@ -10,6 +10,9 @@ import {
 } from "@/lib/tauri";
 import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
 import { open } from "@tauri-apps/plugin-dialog";
+import { confirmAction } from "@/lib/confirm";
+import { toast } from "@/lib/toast";
+import { IconStar } from "@/components/ui/Icons";
 
 export function SelectionBar() {
   const selectedFileIds = useFileStore((s) => s.selectedFileIds);
@@ -61,7 +64,13 @@ export function SelectionBar() {
   }
 
   async function handleDelete() {
-    if (!confirm(`${selectedFiles.length} 件を削除しますか？`)) return;
+    const ok = await confirmAction({
+      title: "削除の確認",
+      message: `${selectedFiles.length} 件を削除しますか？`,
+      confirmLabel: "削除",
+      danger: true,
+    });
+    if (!ok) return;
     if (isDesktop) {
       await runBatch("ゴミ箱へ移動", async () => {
         await batchTrash(selectedFiles.map((f) => f.absolutePath));
@@ -96,11 +105,32 @@ export function SelectionBar() {
     });
   }
 
+  async function handleExportJson() {
+    const payload = selectedFiles.map((f) => ({
+      id: f.id,
+      displayName: f.displayName,
+      absolutePath: f.absolutePath,
+      aiModel: f.aiModel,
+      aiSteps: f.aiSteps,
+      promptPreview: f.promptPreview,
+      contentHash: f.contentHash,
+    }));
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`${selectedFiles.length} 件を JSON でエクスポートしました`, "success");
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-blue-900/50 bg-blue-950/30 px-4 py-2">
+    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto border-b border-blue-900/50 bg-blue-950/30 px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:px-4 sm:py-2 [&::-webkit-scrollbar]:hidden">
       <span className="text-sm text-blue-300">{selectedFileIds.length} 件選択中</span>
-      <button type="button" onClick={() => void handleFavorite(true)} className="action-btn">
-        ★ お気に入り
+      <button type="button" onClick={() => void handleFavorite(true)} className="action-btn flex items-center gap-1">
+        <IconStar className="h-3.5 w-3.5" filled />
+        お気に入り
       </button>
       <button type="button" onClick={() => void handleFavorite(false)} className="action-btn">
         お気に入り解除
@@ -142,6 +172,9 @@ export function SelectionBar() {
           </button>
         </>
       )}
+      <button type="button" onClick={() => void handleExportJson()} className="action-btn">
+        JSON出力
+      </button>
       <button type="button" onClick={() => void handleDelete()} className="action-btn-danger">
         削除
       </button>

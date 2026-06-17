@@ -96,10 +96,16 @@ CREATE TABLE IF NOT EXISTS thumbnails (
   created_at TEXT,
   FOREIGN KEY(file_id) REFERENCES files(id)
 );
+
+CREATE TABLE IF NOT EXISTS processed_photo_assets (
+  local_identifier TEXT PRIMARY KEY,
+  processed_at TEXT NOT NULL
+);
 "#;
 
 const POST_MIGRATION_SQL: &str = r#"
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_metadata_file_id ON ai_generation_metadata(file_id);
+CREATE INDEX IF NOT EXISTS idx_files_content_hash ON files(content_hash) WHERE content_hash IS NOT NULL AND is_deleted = 0;
 "#;
 
 pub fn run_migrations(conn: &rusqlite::Connection) -> Result<(), String> {
@@ -107,5 +113,7 @@ pub fn run_migrations(conn: &rusqlite::Connection) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     crate::db::repositories::metadata::dedupe_by_file_id(conn)?;
     conn.execute_batch(POST_MIGRATION_SQL)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    let _ = crate::db::repositories::fts::rebuild_fts_index(conn);
+    Ok(())
 }

@@ -122,7 +122,7 @@ private class PhotoImportPickerDelegate: NSObject, PHPickerViewControllerDelegat
     if #available(iOS 15.0, *), let assetId = result.assetIdentifier {
       let assets = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil)
       if let asset = assets.firstObject {
-        exportOriginalAsset(asset, to: stagingRoot, index: index, completion: completion)
+        PhotoAssetExporter.exportOriginalAsset(asset, to: stagingRoot, index: index, completion: completion)
         return
       }
     }
@@ -130,6 +130,51 @@ private class PhotoImportPickerDelegate: NSObject, PHPickerViewControllerDelegat
   }
 
   private func exportOriginalAsset(
+    _ asset: PHAsset,
+    to stagingRoot: URL,
+    index: Int,
+    completion: @escaping (String?, String?) -> Void
+  ) {
+    PhotoAssetExporter.exportOriginalAsset(asset, to: stagingRoot, index: index, completion: completion)
+  }
+
+  private func exportFromItemProvider(
+    _ provider: NSItemProvider,
+    to stagingRoot: URL,
+    index: Int,
+    completion: @escaping (String?, String?) -> Void
+  ) {
+    provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [self] data, error in
+      if let error = error {
+        completion(nil, error.localizedDescription)
+        return
+      }
+      guard let data = data else {
+        completion(nil, "Empty image data")
+        return
+      }
+
+      let suggested = provider.suggestedName ?? "photo_\(index)"
+      let filename = suggested.contains(".") ? suggested : "\(suggested).png"
+      let dest = self.uniqueDestination(in: stagingRoot, filename: filename)
+
+      do {
+        try data.write(to: dest)
+        completion(dest.path, nil)
+      } catch {
+        completion(nil, error.localizedDescription)
+      }
+    }
+  }
+
+  private func uniqueDestination(in directory: URL, filename: String) -> URL {
+    PhotoAssetExporter.uniqueDestination(in: directory, filename: filename)
+  }
+}
+
+@available(iOS 14.0, *)
+private enum PhotoAssetExporter {
+  static func exportOriginalAsset(
     _ asset: PHAsset,
     to stagingRoot: URL,
     index: Int,
@@ -170,36 +215,7 @@ private class PhotoImportPickerDelegate: NSObject, PHPickerViewControllerDelegat
     }
   }
 
-  private func exportFromItemProvider(
-    _ provider: NSItemProvider,
-    to stagingRoot: URL,
-    index: Int,
-    completion: @escaping (String?, String?) -> Void
-  ) {
-    provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [self] data, error in
-      if let error = error {
-        completion(nil, error.localizedDescription)
-        return
-      }
-      guard let data = data else {
-        completion(nil, "Empty image data")
-        return
-      }
-
-      let suggested = provider.suggestedName ?? "photo_\(index)"
-      let filename = suggested.contains(".") ? suggested : "\(suggested).png"
-      let dest = self.uniqueDestination(in: stagingRoot, filename: filename)
-
-      do {
-        try data.write(to: dest)
-        completion(dest.path, nil)
-      } catch {
-        completion(nil, error.localizedDescription)
-      }
-    }
-  }
-
-  private func uniqueDestination(in directory: URL, filename: String) -> URL {
+  static func uniqueDestination(in directory: URL, filename: String) -> URL {
     let base = (filename as NSString).deletingPathExtension
     let ext = (filename as NSString).pathExtension
     var candidate = directory.appendingPathComponent(filename)
@@ -211,12 +227,80 @@ private class PhotoImportPickerDelegate: NSObject, PHPickerViewControllerDelegat
     }
     return candidate
   }
+
+  static func isPngAsset(_ asset: PHAsset) -> Bool {
+    let resources = PHAssetResource.assetResources(for: asset)
+    let resource =
+      resources.first(where: { $0.type == .photo || $0.type == .fullSizePhoto || $0.type == .alternatePhoto })
+      ?? resources.first
+    guard let resource = resource else { return false }
+    let name = resource.originalFilename.lowercased()
+    if name.hasSuffix(".png") { return true }
+    return resource.uniformTypeIdentifier == UTType.png.identifier
+  }
+
+  static func probeNovelAiPng(_ asset: PHAsset) -> Bool {
+    let resources = PHAssetResource.assetResources(for: asset)
+    let resource =
+      resources.first(where: { $0.type == .photo || $0.type == .fullSizePhoto || $0.type == .alternatePhoto })
+      ?? resources.first
+    guard let resource = resource else { return false }
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var collected = Data()
+    var matched = false
+    var finished = false
+    let options = PHAssetResourceRequestOptions()
+    options.isNetworkAccessAllowed = true
+
+    PHAssetResourceManager.default().requestData(for: resource, options: options) { chunk in
+      if finished { return }
+      collected.append(chunk)
+      if collected.count >= 65536 {
+        finished = true
+        if collected.range(of: Data("NovelAI".utf8)) != nil {
+          matched = true
+        } else if let text = String(data: collected.prefix(65536), encoding: .utf8) {
+          matched = text.contains("NovelAI") || text.contains("\"Description\"")
+        }
+        semaphore.signal()
+      }
+    } completionHandler: { error in
+      if finished { return }
+      finished = true
+      if error == nil {
+        if collected.range(of: Data("NovelAI".utf8)) != nil {
+          matched = true
+        } else if let text = String(data: collected, encoding: .utf8) {
+          matched = text.contains("NovelAI") || text.contains("\"Description\"")
+        }
+      }
+      semaphore.signal()
+    }
+
+    semaphore.wait()
+    return matched
+  }
+}
+
+@available(iOS 14.0, *)
+private struct PhotoLibraryScanSession {
+  let stagingRoot: URL
+  let assetList: [PHAsset]
+  let pngOnly: Bool
+  let novelaiProbe: Bool
+
+  var total: Int { assetList.count }
 }
 
 @available(iOS 14.0, *)
 class FolderImportPlugin: Plugin {
   private var pickerDelegate: ImportPickerDelegate?
   private var photoPickerDelegate: PhotoImportPickerDelegate?
+  private static var photoLibraryExportCancelled = false
+  private static let photoExportConcurrency = 4
+  private static var photoLibraryScanSessions: [String: PhotoLibraryScanSession] = [:]
+  private static let photoLibraryScanSessionsLock = NSLock()
 
   override init() {
     super.init()
@@ -224,6 +308,23 @@ class FolderImportPlugin: Plugin {
 
   private struct ShareFileArgs: Decodable {
     let path: String
+  }
+
+  private struct ExportBatchArgs: Decodable {
+    let sessionId: String
+    let offset: Int
+    let limit: Int
+  }
+
+  private struct SessionIdArgs: Decodable {
+    let sessionId: String
+    let cleanup: Bool?
+  }
+
+  private struct BeginPhotoLibraryScanArgs: Decodable {
+    let excludeLocalIdentifiers: [String]?
+    let pngOnly: Bool?
+    let novelaiProbe: Bool?
   }
 
   private static let importContentTypes: [UTType] = [
@@ -264,8 +365,337 @@ class FolderImportPlugin: Plugin {
     }
   }
 
+  @objc public func cancelPhotoLibraryExport(_ invoke: Invoke) {
+    FolderImportPlugin.photoLibraryExportCancelled = true
+    Self.cleanupPhotoLibraryScanSessions(removeFiles: true)
+    invoke.resolve()
+  }
+
+  @objc public func beginPhotoLibraryScan(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(BeginPhotoLibraryScanArgs.self)
+    FolderImportPlugin.photoLibraryExportCancelled = false
+    requestPhotoLibraryAccess { status in
+      guard status == .authorized || status == .limited else {
+        invoke.reject("Photo library access denied")
+        return
+      }
+
+      let fetchOptions = PHFetchOptions()
+      fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+      let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+      let excludeSet = Set(args.excludeLocalIdentifiers ?? [])
+      let pngOnly = args.pngOnly ?? false
+      let novelaiProbe = args.novelaiProbe ?? pngOnly
+      var assetList: [PHAsset] = []
+      assetList.reserveCapacity(assets.count)
+
+      assets.enumerateObjects { asset, _, _ in
+        if excludeSet.contains(asset.localIdentifier) {
+          return
+        }
+        if pngOnly && !PhotoAssetExporter.isPngAsset(asset) {
+          return
+        }
+        assetList.append(asset)
+      }
+
+      let totalCount = assetList.count
+
+      if totalCount == 0 {
+        invoke.resolve(["sessionId": NSNull(), "total": 0])
+        return
+      }
+
+      let stagingRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "photo-library-scan-\(UUID().uuidString)",
+        isDirectory: true
+      )
+
+      do {
+        try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+      } catch {
+        invoke.reject("Failed to create staging directory: \(error.localizedDescription)")
+        return
+      }
+
+      let sessionId = UUID().uuidString
+      let session = PhotoLibraryScanSession(
+        stagingRoot: stagingRoot,
+        assetList: assetList,
+        pngOnly: pngOnly,
+        novelaiProbe: novelaiProbe
+      )
+
+      Self.photoLibraryScanSessionsLock.lock()
+      Self.photoLibraryScanSessions[sessionId] = session
+      Self.photoLibraryScanSessionsLock.unlock()
+
+      invoke.resolve(["sessionId": sessionId, "total": totalCount])
+    }
+  }
+
+  @objc public func exportPhotoLibraryBatch(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(ExportBatchArgs.self)
+
+    DispatchQueue.global(qos: .utility).async {
+      if FolderImportPlugin.photoLibraryExportCancelled {
+        invoke.resolve(["items": []])
+        return
+      }
+
+      Self.photoLibraryScanSessionsLock.lock()
+      let session = Self.photoLibraryScanSessions[args.sessionId]
+      Self.photoLibraryScanSessionsLock.unlock()
+
+      guard let session = session else {
+        invoke.reject("Photo library scan session not found")
+        return
+      }
+
+      let start = max(0, args.offset)
+      let end = min(start + max(1, args.limit), session.total)
+      guard start < end else {
+        invoke.resolve(["items": []])
+        return
+      }
+
+      var exportedItems: [[String: String]] = []
+      exportedItems.reserveCapacity(end - start)
+      let pathsLock = NSLock()
+      let group = DispatchGroup()
+      let semaphore = DispatchSemaphore(value: Self.photoExportConcurrency)
+      var exportError: String?
+
+      for index in start..<end {
+        if FolderImportPlugin.photoLibraryExportCancelled {
+          break
+        }
+
+        let asset = session.assetList[index]
+        group.enter()
+        semaphore.wait()
+
+        DispatchQueue.global(qos: .utility).async {
+          defer {
+            semaphore.signal()
+            group.leave()
+          }
+
+          if FolderImportPlugin.photoLibraryExportCancelled {
+            return
+          }
+
+          if session.novelaiProbe && !PhotoAssetExporter.probeNovelAiPng(asset) {
+            pathsLock.lock()
+            exportedItems.append([
+              "path": "",
+              "assetId": asset.localIdentifier,
+            ])
+            pathsLock.unlock()
+            return
+          }
+
+          let waitGroup = DispatchGroup()
+          var path: String?
+          var errorMessage: String?
+
+          waitGroup.enter()
+          PhotoAssetExporter.exportOriginalAsset(asset, to: session.stagingRoot, index: index) { exportedPath, error in
+            path = exportedPath
+            errorMessage = error
+            waitGroup.leave()
+          }
+          waitGroup.wait()
+
+          if let errorMessage = errorMessage {
+            pathsLock.lock()
+            if exportError == nil {
+              exportError = errorMessage
+            }
+            pathsLock.unlock()
+            return
+          }
+
+          if let path = path {
+            pathsLock.lock()
+            exportedItems.append([
+              "path": path,
+              "assetId": asset.localIdentifier,
+            ])
+            pathsLock.unlock()
+          }
+        }
+      }
+
+      group.notify(queue: .main) {
+        if let exportError = exportError {
+          invoke.reject(exportError)
+          return
+        }
+        invoke.resolve(["items": exportedItems])
+      }
+    }
+  }
+
+  @objc public func endPhotoLibraryScan(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(SessionIdArgs.self)
+    let cleanup = args.cleanup ?? true
+    Self.removePhotoLibraryScanSession(args.sessionId, removeFiles: cleanup)
+    invoke.resolve()
+  }
+
+  private func requestPhotoLibraryAccess(completion: @escaping (PHAuthorizationStatus) -> Void) {
+    if #available(iOS 14.0, *) {
+      PHPhotoLibrary.requestAuthorization(for: .readWrite, handler: completion)
+    } else {
+      PHPhotoLibrary.requestAuthorization(completion)
+    }
+  }
+
+  private static func removePhotoLibraryScanSession(_ sessionId: String, removeFiles: Bool) {
+    photoLibraryScanSessionsLock.lock()
+    let session = photoLibraryScanSessions.removeValue(forKey: sessionId)
+    photoLibraryScanSessionsLock.unlock()
+
+    guard removeFiles, let session = session else {
+      return
+    }
+
+    try? FileManager.default.removeItem(at: session.stagingRoot)
+  }
+
+  private static func cleanupPhotoLibraryScanSessions(removeFiles: Bool) {
+    photoLibraryScanSessionsLock.lock()
+    let sessions = photoLibraryScanSessions
+    photoLibraryScanSessions.removeAll()
+    photoLibraryScanSessionsLock.unlock()
+
+    guard removeFiles else {
+      return
+    }
+
+    for session in sessions.values {
+      try? FileManager.default.removeItem(at: session.stagingRoot)
+    }
+  }
+
+  @objc public func scanNovelAiPhotos(_ invoke: Invoke) {
+    FolderImportPlugin.photoLibraryExportCancelled = false
+
+    let requestAuthorization: (@escaping (PHAuthorizationStatus) -> Void) -> Void = { handler in
+      if #available(iOS 14.0, *) {
+        PHPhotoLibrary.requestAuthorization(for: .readWrite, handler: handler)
+      } else {
+        PHPhotoLibrary.requestAuthorization(handler)
+      }
+    }
+
+    requestAuthorization { status in
+      guard status == .authorized || status == .limited else {
+        invoke.reject("Photo library access denied")
+        return
+      }
+      self.exportAllPhotoLibraryAssets(invoke: invoke)
+    }
+  }
+
+  private func exportAllPhotoLibraryAssets(invoke: Invoke) {
+    let fetchOptions = PHFetchOptions()
+    fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+    let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+    let totalCount = assets.count
+
+    if totalCount == 0 {
+      invoke.resolve(["paths": []])
+      return
+    }
+
+    let stagingRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "photo-library-scan-\(UUID().uuidString)",
+      isDirectory: true
+    )
+
+    do {
+      try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+    } catch {
+      invoke.reject("Failed to create staging directory: \(error.localizedDescription)")
+      return
+    }
+
+    var exportedPaths: [String] = []
+    exportedPaths.reserveCapacity(totalCount)
+    let pathsLock = NSLock()
+    let group = DispatchGroup()
+    let semaphore = DispatchSemaphore(value: Self.photoExportConcurrency)
+    var exportError: String?
+
+    for index in 0..<totalCount {
+      if FolderImportPlugin.photoLibraryExportCancelled {
+        break
+      }
+
+      let asset = assets.object(at: index)
+      group.enter()
+      semaphore.wait()
+
+      DispatchQueue.global(qos: .utility).async {
+        defer {
+          semaphore.signal()
+          group.leave()
+        }
+
+        if FolderImportPlugin.photoLibraryExportCancelled {
+          return
+        }
+
+        let semaphoreGroup = DispatchGroup()
+        var path: String?
+        var errorMessage: String?
+
+        semaphoreGroup.enter()
+        PhotoAssetExporter.exportOriginalAsset(asset, to: stagingRoot, index: index) { exportedPath, error in
+          path = exportedPath
+          errorMessage = error
+          semaphoreGroup.leave()
+        }
+        semaphoreGroup.wait()
+
+        if let errorMessage = errorMessage {
+          pathsLock.lock()
+          if exportError == nil {
+            exportError = errorMessage
+          }
+          pathsLock.unlock()
+          return
+        }
+
+        if let path = path {
+          pathsLock.lock()
+          exportedPaths.append(path)
+          pathsLock.unlock()
+        }
+      }
+    }
+
+    group.notify(queue: .main) {
+      if let exportError = exportError {
+        invoke.reject(exportError)
+        return
+      }
+      if FolderImportPlugin.photoLibraryExportCancelled {
+        for path in exportedPaths {
+          try? FileManager.default.removeItem(atPath: path)
+        }
+        try? FileManager.default.removeItem(at: stagingRoot)
+        invoke.resolve(["paths": []])
+        return
+      }
+      invoke.resolve(["paths": exportedPaths])
+    }
+  }
+
   @objc public func shareFile(_ invoke: Invoke) throws {
-    guard let args = invoke.parseArgs(ShareFileArgs.self) else { return }
+    let args = try invoke.parseArgs(ShareFileArgs.self)
     let url = URL(fileURLWithPath: args.path)
     guard FileManager.default.fileExists(atPath: url.path) else {
       invoke.reject("File not found")

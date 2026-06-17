@@ -3,6 +3,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
 import { isDesktopPlatform, isMobilePlatform } from "@/lib/platform";
 import { scanFolder } from "@/lib/tauri";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronUp,
+  IconRefresh,
+} from "@/components/ui/Icons";
 
 export function Toolbar() {
   const goBack = useFileStore((s) => s.goBack);
@@ -63,17 +69,17 @@ export function Toolbar() {
   const isMobile = isMobilePlatform(platformName);
 
   return (
-    <header className="flex h-12 items-center gap-2 border-b border-neutral-800 bg-neutral-950 px-3">
+    <header className="flex min-h-11 shrink-0 items-center gap-1.5 border-b border-neutral-800 bg-neutral-950 px-2 pt-[var(--safe-top)] sm:min-h-12 sm:gap-2 sm:px-3">
       {isDesktop && (
         <>
-          <button type="button" onClick={() => void goBack()} className="toolbar-btn">
-            ←
+          <button type="button" onClick={() => void goBack()} className="toolbar-btn" aria-label="戻る">
+            <IconChevronLeft />
           </button>
-          <button type="button" onClick={() => void goForward()} className="toolbar-btn">
-            →
+          <button type="button" onClick={() => void goForward()} className="toolbar-btn" aria-label="進む">
+            <IconChevronRight />
           </button>
-          <button type="button" onClick={() => void goUp()} className="toolbar-btn">
-            ↑
+          <button type="button" onClick={() => void goUp()} className="toolbar-btn" aria-label="上へ">
+            <IconChevronUp />
           </button>
           <button type="button" onClick={() => void handleOpenFolder()} className="toolbar-btn">
             開く
@@ -110,23 +116,27 @@ export function Toolbar() {
           {scanning ? "スキャン中" : "スキャン"}
         </button>
       )}
-      {isMobile && (
+      {isMobile && viewMode !== "settings" && (
         <button
           type="button"
           onClick={() => void setViewMode("settings")}
-          className="toolbar-btn whitespace-nowrap"
+          className="toolbar-btn shrink-0 whitespace-nowrap lg:hidden"
         >
           設定
         </button>
       )}
-      <button type="button" onClick={() => void refresh()} className="toolbar-btn">
-        ↻
+      <button type="button" onClick={() => void refresh()} className="toolbar-btn shrink-0" aria-label="更新">
+        <IconRefresh />
       </button>
       {scanProgress && (
-        <span className="hidden truncate text-xs text-neutral-500 lg:block">{scanProgress}</span>
+        <span className="hidden max-w-[5rem] truncate text-xs text-neutral-500 sm:max-w-[8rem] lg:max-w-xs xl:block">
+          {scanProgress}
+        </span>
       )}
       {batchProgress && (
-        <span className="hidden truncate text-xs text-blue-400 lg:block">{batchProgress}</span>
+        <span className="max-w-[4rem] truncate text-xs text-blue-400 sm:max-w-[6rem] lg:max-w-xs">
+          {batchProgress}
+        </span>
       )}
     </header>
   );

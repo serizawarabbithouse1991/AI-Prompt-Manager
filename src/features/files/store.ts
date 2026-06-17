@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import type {
   Bookmark,
+  Collection,
   FileEntry,
   FileFilter,
   LayoutMode,
+  ImportProgress,
   RecentFolder,
   SearchScope,
   SortField,
@@ -17,12 +19,17 @@ import { filterFilesByQuery, getDisplayFiles } from "@/features/files/viewUtils"
 import {
   getSpecialPaths,
   listAiLibrary,
+  listCollectionFiles,
   listDirectory,
+  listDuplicateFiles,
   listFavorites,
   listTags,
   searchFiles,
 } from "@/lib/tauri";
-import { getPlatform, isMobilePlatform } from "@/lib/platform";
+import { getPlatform, isIOSPlatform, isMobilePlatform } from "@/lib/platform";
+import { getDefaultBrowsePath, isNovelAiPath } from "@/lib/browsePaths";
+import { loadAutoPhotoScanEnabled } from "@/lib/photoScanPrefs";
+import { formatPhotoScanResult, runPhotoLibraryScan } from "@/lib/photoScan";
 
 const BOOKMARKS_KEY = "ai-fm-bookmarks";
 const RECENT_FOLDERS_KEY = "ai-fm-recent-folders";
@@ -106,6 +113,8 @@ type FileStore = {
   scanning: boolean;
   scanProgress: string | null;
   batchProgress: string | null;
+  importProgress: ImportProgress | null;
+  photoScanRunning: boolean;
   metadata: AIGenerationMetadata | null;
   tags: Tag[];
   allTags: Tag[];
@@ -118,6 +127,12 @@ type FileStore = {
   layoutMode: LayoutMode;
   lightboxFileId: string | null;
   searchScope: SearchScope;
+  searchSourceApp: string;
+  searchModel: string;
+  selectedCollectionId: string | null;
+  collections: Collection[];
+  searchHasMore: boolean;
+  searchLoadingMore: boolean;
   bookmarks: Bookmark[];
   recentFolders: RecentFolder[];
   setPlatformName: (name: string) => void;
@@ -128,6 +143,10 @@ type FileStore = {
   setFilterTagId: (tagId: string | null) => void;
   setLayoutMode: (mode: LayoutMode) => void;
   setSearchScope: (scope: SearchScope) => void;
+  setSearchSourceApp: (value: string) => void;
+  setSearchModel: (value: string) => void;
+  setSelectedCollectionId: (id: string | null) => void;
+  setCollections: (collections: Collection[]) => void;
   setLightboxFileId: (fileId: string | null) => void;
   getDisplayFiles: () => FileEntry[];
   initialize: () => Promise<void>;
@@ -143,9 +162,12 @@ type FileStore = {
   exitSelectionMode: () => void;
   setViewMode: (mode: ViewMode) => Promise<void>;
   runSearch: (query: string) => Promise<void>;
+  loadMoreSearch: () => Promise<void>;
   setScanProgress: (message: string | null) => void;
   setBatchProgress: (message: string | null) => void;
+  setImportProgress: (progress: ImportProgress | null) => void;
   setScanning: (scanning: boolean) => void;
+  runAutoPhotoScanIfEnabled: () => Promise<void>;
   refresh: () => Promise<void>;
   setMetadata: (metadata: AIGenerationMetadata | null) => void;
   setTags: (tags: Tag[]) => void;
@@ -181,6 +203,8 @@ export const useFileStore = create<FileStore>((set, get) => ({
   scanning: false,
   scanProgress: null,
   batchProgress: null,
+  importProgress: null,
+  photoScanRunning: false,
   metadata: null,
   tags: [],
   allTags: [],
@@ -193,6 +217,12 @@ export const useFileStore = create<FileStore>((set, get) => ({
   layoutMode: initialViewPrefs.layoutMode ?? "grid",
   searchScope: initialViewPrefs.searchScope ?? "global",
   lightboxFileId: null,
+  searchSourceApp: "",
+  searchModel: "",
+  selectedCollectionId: null,
+  collections: [],
+  searchHasMore: false,
+  searchLoadingMore: false,
   bookmarks: loadBookmarks(),
   recentFolders: loadRecentFolders(),
   setPlatformName: (name) => set({ platformName: name }),
@@ -269,10 +299,55 @@ export const useFileStore = create<FileStore>((set, get) => ({
       searchScope: scope,
     });
   },
+  setSearchSourceApp: (value) => {
+    set({ searchSourceApp: value });
+    const { viewMode, searchQuery } = get();
+    if (viewMode === "search" && searchQuery) {
+      void get().runSearch(searchQuery);
+    }
+  },
+  setSearchModel: (value) => {
+    set({ searchModel: value });
+    const { viewMode, searchQuery } = get();
+    if (viewMode === "search" && searchQuery) {
+      void get().runSearch(searchQuery);
+    }
+  },
+  setSelectedCollectionId: (id) => set({ selectedCollectionId: id }),
+  setCollections: (collections) => set({ collections }),
   setLightboxFileId: (fileId) => set({ lightboxFileId: fileId }),
   setScanProgress: (message) => set({ scanProgress: message }),
   setBatchProgress: (message) => set({ batchProgress: message }),
+  setImportProgress: (progress) => set({ importProgress: progress }),
   setScanning: (scanning) => set({ scanning }),
+
+  runAutoPhotoScanIfEnabled: async () => {
+    const { platformName, photoScanRunning } = get();
+    if (!isIOSPlatform(platformName) || !loadAutoPhotoScanEnabled() || photoScanRunning) {
+      return;
+    }
+
+    set({
+      photoScanRunning: true,
+      scanning: true,
+      scanProgress: "新しい写真を自動スキャン中…",
+      batchProgress: "準備中…",
+      importProgress: null,
+    });
+
+    try {
+      const result = await runPhotoLibraryScan(true);
+      const message = formatPhotoScanResult(result);
+      set({ scanProgress: message, batchProgress: null });
+      if ((result.novelaiCount ?? result.importedCount) > 0) {
+        await get().setViewMode("ai-library");
+      }
+    } catch (e) {
+      set({ scanProgress: String(e) });
+    } finally {
+      set({ photoScanRunning: false, scanning: false, importProgress: null });
+    }
+  },
   setMetadata: (metadata) => set({ metadata }),
   setTags: (tags) => set({ tags }),
   setAllTags: (tags) => set({ allTags: tags }),
@@ -339,18 +414,34 @@ export const useFileStore = create<FileStore>((set, get) => ({
       if (isMobilePlatform(platformName)) {
         await get().setViewMode("ai-library");
       } else {
-        await get().navigateTo(specialPaths.home);
+        const startPath = getDefaultBrowsePath(specialPaths, platformName);
+        if (isNovelAiPath(startPath, specialPaths)) {
+          set({ fileFilter: "images" });
+          saveViewPrefs({
+            sortField: get().sortField,
+            sortOrder: get().sortOrder,
+            fileFilter: "images",
+            filterTagId: get().filterTagId,
+            layoutMode: get().layoutMode,
+            searchScope: get().searchScope,
+          });
+        }
+        await get().navigateTo(startPath);
       }
+      set({ loading: false });
+      void get().runAutoPhotoScanIfEnabled();
     } catch (e) {
       set({ error: String(e), loading: false });
     }
   },
 
   loadDirectory: async (path: string) => {
-    const { selectedFileId, metadata, tags, inspectorOpen } = get();
+    const { selectedFileId, metadata, tags, inspectorOpen, fileFilter, specialPaths } = get();
     set({ loading: true, error: null });
     try {
-      const files = await listDirectory(path);
+      const imagesOnly =
+        fileFilter === "images" || isNovelAiPath(path, specialPaths);
+      const files = await listDirectory(path, imagesOnly);
       const selectedFile = findFile(files, selectedFileId);
       set({
         currentPath: path,
@@ -368,10 +459,10 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   navigateTo: async (path: string) => {
-    const { history, historyIndex, recentFolders } = get();
+    const { history, historyIndex, recentFolders, specialPaths } = get();
     const nextHistory = history.slice(0, historyIndex + 1);
     nextHistory.push(path);
-    set({
+    const updates: Partial<FileStore> = {
       history: nextHistory,
       historyIndex: nextHistory.length - 1,
       viewMode: "browse",
@@ -379,7 +470,19 @@ export const useFileStore = create<FileStore>((set, get) => ({
       selectedFileIds: [],
       selectionMode: false,
       recentFolders: pushRecentFolder(path, recentFolders),
-    });
+    };
+    if (isNovelAiPath(path, specialPaths)) {
+      updates.fileFilter = "images";
+      saveViewPrefs({
+        sortField: get().sortField,
+        sortOrder: get().sortOrder,
+        fileFilter: "images",
+        filterTagId: get().filterTagId,
+        layoutMode: get().layoutMode,
+        searchScope: get().searchScope,
+      });
+    }
+    set(updates);
     await get().loadDirectory(path);
   },
 
@@ -507,6 +610,33 @@ export const useFileStore = create<FileStore>((set, get) => ({
         });
         return;
       }
+      if (mode === "collections") {
+        const collectionId = get().selectedCollectionId;
+        const files = collectionId ? await listCollectionFiles(collectionId) : [];
+        set({
+          files,
+          loading: false,
+          selectedFileId: null,
+          selectedFile: null,
+          metadata: null,
+          tags: [],
+          inspectorOpen: false,
+        });
+        return;
+      }
+      if (mode === "duplicates") {
+        const files = await listDuplicateFiles();
+        set({
+          files,
+          loading: false,
+          selectedFileId: null,
+          selectedFile: null,
+          metadata: null,
+          tags: [],
+          inspectorOpen: false,
+        });
+        return;
+      }
       if (mode === "settings") {
         set({ loading: false, selectedFileId: null, selectedFile: null, inspectorOpen: false });
         return;
@@ -525,7 +655,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   runSearch: async (query: string) => {
-    const { searchScope, viewMode, currentPath, files } = get();
+    const { searchScope, viewMode, currentPath, files, searchSourceApp, searchModel } = get();
     set({
       loading: true,
       error: null,
@@ -533,6 +663,8 @@ export const useFileStore = create<FileStore>((set, get) => ({
       viewMode: "search",
       selectedFileIds: [],
       selectionMode: false,
+      searchHasMore: false,
+      searchLoadingMore: false,
     });
     try {
       if (searchScope === "folder") {
@@ -543,8 +675,10 @@ export const useFileStore = create<FileStore>((set, get) => ({
           baseFiles = await listAiLibrary();
         } else if (viewMode === "favorites") {
           baseFiles = await listFavorites();
+        } else if (viewMode === "collections" && get().selectedCollectionId) {
+          baseFiles = await listCollectionFiles(get().selectedCollectionId!);
         }
-        const filtered = filterFilesByQuery(baseFiles, query);
+        const filtered = filterFilesByQuery(baseFiles, query, true);
         set({
           files: filtered,
           loading: false,
@@ -554,15 +688,44 @@ export const useFileStore = create<FileStore>((set, get) => ({
         return;
       }
 
-      const results = await searchFiles(query);
+      const results = await searchFiles(query, {
+        sourceApp: searchSourceApp || null,
+        model: searchModel || null,
+        limit: 50,
+        offset: 0,
+      });
       set({
         files: results,
         loading: false,
         selectedFileId: null,
         selectedFile: null,
+        searchHasMore: results.length >= 50,
       });
     } catch (e) {
       set({ error: String(e), loading: false });
+    }
+  },
+
+  loadMoreSearch: async () => {
+    const { searchQuery, searchSourceApp, searchModel, files, searchHasMore, searchLoadingMore } =
+      get();
+    if (!searchHasMore || searchLoadingMore || !searchQuery) return;
+
+    set({ searchLoadingMore: true });
+    try {
+      const results = await searchFiles(searchQuery, {
+        sourceApp: searchSourceApp || null,
+        model: searchModel || null,
+        limit: 50,
+        offset: files.length,
+      });
+      set({
+        files: [...files, ...results],
+        searchHasMore: results.length >= 50,
+        searchLoadingMore: false,
+      });
+    } catch (e) {
+      set({ error: String(e), searchLoadingMore: false });
     }
   },
 
@@ -593,6 +756,12 @@ export const useFileStore = create<FileStore>((set, get) => ({
         tags: selectedFile ? tags : [],
         inspectorOpen: selectedFile ? inspectorOpen : false,
       });
+    } else if (viewMode === "collections" && get().selectedCollectionId) {
+      const files = await listCollectionFiles(get().selectedCollectionId!);
+      set({ files });
+    } else if (viewMode === "duplicates") {
+      const files = await listDuplicateFiles();
+      set({ files });
     } else if (viewMode === "settings") {
       await get().setViewMode("settings");
     } else if (currentPath) {

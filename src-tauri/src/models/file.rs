@@ -24,6 +24,12 @@ pub struct FileEntry {
     pub thumbnail_path: Option<String>,
     #[serde(default)]
     pub tag_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai_steps: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_preview: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +58,12 @@ pub struct ImportResult {
     pub image_count: u32,
     pub zip_count: u32,
     pub error_count: u32,
+    #[serde(default)]
+    pub skipped_count: u32,
+    #[serde(default)]
+    pub novelai_count: u32,
+    #[serde(default)]
+    pub duplicate_count: u32,
 }
 
 pub fn detect_file_kind(extension: &str, is_directory: bool) -> String {

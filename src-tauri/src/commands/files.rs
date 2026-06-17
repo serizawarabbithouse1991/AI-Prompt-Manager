@@ -1,13 +1,13 @@
 use std::fs;
 use std::path::Path;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::db::connection::{app_data_dir, with_conn};
 use crate::db::repositories::files as files_repo;
 use crate::models::file::{FileEntry, ImportResult, ScanResult, SpecialPaths};
 use crate::platform::{self, ai_library_dir};
-use crate::services::{file_ops, file_scanner, import_service};
+use crate::services::{file_ops, file_scanner, import_service, library_reconcile};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,18 +22,48 @@ pub fn get_platform_name() -> String {
 }
 
 #[tauri::command]
-pub async fn list_directory(app: AppHandle, path: String) -> Result<Vec<FileEntry>, String> {
+pub async fn list_directory(
+    app: AppHandle,
+    path: String,
+    images_only: Option<bool>,
+) -> Result<Vec<FileEntry>, String> {
     let dir = Path::new(&path);
     if !dir.is_dir() {
         return Err(format!("Not a directory: {path}"));
     }
+
+    let images_only = images_only.unwrap_or(false);
 
     // パフォーマンス重視: 一覧取得ではサムネイルを生成しない（既存のものだけ DB から付与）。
     // 生成はスキャン時・ファイル選択時に行う。
     let mut entries = Vec::new();
     for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
-        match files_repo::build_entry_from_metadata(&entry.path(), None, None) {
+        let entry_path = entry.path();
+        let file_name = entry_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if file_name.starts_with('.') {
+            continue;
+        }
+        if images_only {
+            let is_dir = entry_path.is_dir();
+            if !is_dir {
+                let ext = entry_path
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                let is_image = matches!(
+                    ext.as_str(),
+                    "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "heic" | "heif"
+                );
+                if !is_image {
+                    continue;
+                }
+            }
+        }
+        match files_repo::build_entry_from_metadata(&entry_path, None, None) {
             Ok(file_entry) => entries.push(file_entry),
             Err(_) => continue,
         }
@@ -130,11 +160,189 @@ pub async fn import_from_saf(app: AppHandle, uri: String) -> Result<FileEntry, S
     }
 }
 
+#[derive(Debug, serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ImportProgressPayload {
+    current: usize,
+    total: usize,
+    message: String,
+    phase: String,
+    novelai_count: u32,
+    skipped_count: u32,
+    eta_seconds: Option<u64>,
+}
+
+fn compute_eta_seconds(current: usize, total: usize, elapsed_secs: f64) -> Option<u64> {
+    if current == 0 || current >= total || elapsed_secs <= 0.0 {
+        return None;
+    }
+    let rate = current as f64 / elapsed_secs;
+    if rate <= 0.0 {
+        return None;
+    }
+    Some(((total - current) as f64 / rate).ceil() as u64)
+}
+
+fn emit_import_progress(
+    app: &AppHandle,
+    current: usize,
+    total: usize,
+    message: &str,
+    phase: &str,
+    novelai_count: u32,
+    skipped_count: u32,
+    eta_seconds: Option<u64>,
+) {
+    let _ = app.emit(
+        "import-progress",
+        ImportProgressPayload {
+            current,
+            total,
+            message: message.to_string(),
+            phase: phase.to_string(),
+            novelai_count,
+            skipped_count,
+            eta_seconds,
+        },
+    );
+}
+
 #[tauri::command]
-pub async fn import_paths(app: AppHandle, paths: Vec<String>) -> Result<ImportResult, String> {
+pub async fn import_paths(
+    app: AppHandle,
+    paths: Vec<String>,
+    novelai_only: Option<bool>,
+) -> Result<ImportResult, String> {
     let app_data = app_data_dir(&app)?;
     let dest = ai_library_dir(&app_data);
-    with_conn(&app, |conn| import_service::import_paths(conn, &app_data, &dest, &paths))
+    let novelai_only = novelai_only.unwrap_or(false);
+    with_conn(&app, |conn| {
+        import_service::import_paths(conn, &app_data, &dest, &paths, novelai_only)
+    })
+}
+
+#[tauri::command]
+pub async fn scan_photo_library_novelai(
+    app: AppHandle,
+    incremental: Option<bool>,
+    png_only: Option<bool>,
+) -> Result<ImportResult, String> {
+    use std::time::Instant;
+
+    import_service::reset_photo_scan_cancel();
+
+    let incremental = incremental.unwrap_or(true);
+    let png_only = png_only.unwrap_or(true);
+    let exclude_ids = if incremental {
+        with_conn(&app, |conn| {
+            crate::db::repositories::photo_scan::list_processed_asset_ids(conn)
+        })?
+    } else {
+        Vec::new()
+    };
+
+    let app_handle = app.clone();
+    emit_import_progress(
+        &app,
+        0,
+        0,
+        if incremental {
+            "新しい写真を確認中…"
+        } else {
+            "写真ライブラリを準備中…"
+        },
+        "export",
+        0,
+        0,
+        None,
+    );
+
+    let export_start = Instant::now();
+    let exported = crate::plugins::folder_import::export_photo_library_with_progress(
+        app.clone(),
+        exclude_ids,
+        png_only,
+        |current, total| {
+            let eta = compute_eta_seconds(current, total, export_start.elapsed().as_secs_f64());
+            emit_import_progress(
+                &app_handle,
+                current,
+                total,
+                if png_only {
+                    "PNG を確認・書き出し中"
+                } else {
+                    "写真を書き出し中"
+                },
+                "export",
+                0,
+                0,
+                eta,
+            );
+        },
+    )
+    .await?;
+
+    if import_service::is_photo_scan_cancelled() {
+        emit_import_progress(&app, 0, 0, "スキャンを中断しました", "import", 0, 0, None);
+        return Ok(ImportResult::default());
+    }
+
+    if exported.is_empty() {
+        emit_import_progress(&app, 0, 0, "新しい写真はありません", "import", 0, 0, None);
+        return Ok(ImportResult::default());
+    }
+
+    let app_data = app_data_dir(&app)?;
+    let dest = ai_library_dir(&app_data);
+    let total = exported.len();
+    let staged: Vec<(String, String)> = exported
+        .into_iter()
+        .map(|item| (item.path, item.asset_id))
+        .collect();
+
+    emit_import_progress(
+        &app,
+        0,
+        total,
+        "NovelAI 判別・取込を開始",
+        "import",
+        0,
+        0,
+        None,
+    );
+
+    let import_start = Instant::now();
+    let result = with_conn(&app, |conn| {
+        import_service::import_staged_photos_with_progress(
+            conn,
+            &app_data,
+            &dest,
+            &staged,
+            true,
+            |current, total, message, partial| {
+                let eta = compute_eta_seconds(current, total, import_start.elapsed().as_secs_f64());
+                emit_import_progress(
+                    &app_handle,
+                    current,
+                    total,
+                    message,
+                    "import",
+                    partial.novelai_count,
+                    partial.skipped_count,
+                    eta,
+                );
+            },
+        )
+    })?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn cancel_photo_library_scan(app: AppHandle) -> Result<(), String> {
+    import_service::cancel_photo_scan();
+    crate::plugins::folder_import::cancel_photo_library_export_plugin(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -280,4 +488,20 @@ pub async fn share_file(app: AppHandle, path: String) -> Result<(), String> {
         let _ = app;
         crate::platform::share_file(&path)
     }
+}
+
+#[tauri::command]
+pub async fn get_storage_diagnostics(
+    app: AppHandle,
+) -> Result<library_reconcile::StorageDiagnostics, String> {
+    let app_data = app_data_dir(&app)?;
+    with_conn(&app, |conn| library_reconcile::get_storage_diagnostics(conn, &app_data))
+}
+
+#[tauri::command]
+pub async fn reconcile_ai_library(
+    app: AppHandle,
+) -> Result<library_reconcile::ReconcileResult, String> {
+    let app_data = app_data_dir(&app)?;
+    with_conn(&app, |conn| library_reconcile::reconcile_ai_library(conn, &app_data))
 }

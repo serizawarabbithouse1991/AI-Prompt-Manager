@@ -5,6 +5,7 @@ use rusqlite::Connection;
 use tauri::{AppHandle, Manager};
 
 use super::migrations;
+use crate::services::library_reconcile;
 
 pub struct DbState(pub Mutex<Connection>);
 
@@ -14,6 +15,23 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
     let db_path = db_path(&app_data);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     migrations::run_migrations(&conn)?;
+    if let Ok(diagnostics) = library_reconcile::get_storage_diagnostics(&conn, &app_data) {
+        eprintln!(
+            "storage diagnostics: disk={} db_library={} db_total={} db_bytes={}",
+            diagnostics.disk_file_count,
+            diagnostics.db_library_count,
+            diagnostics.db_total_count,
+            diagnostics.database_bytes
+        );
+    }
+    if let Ok(result) = library_reconcile::reconcile_ai_library(&conn, &app_data) {
+        if result.restored_count > 0 {
+            eprintln!(
+                "storage reconcile on startup: restored {} file(s)",
+                result.restored_count
+            );
+        }
+    }
     app.manage(DbState(Mutex::new(conn)));
     Ok(())
 }
