@@ -4,16 +4,10 @@ import {
   LAYOUT_LABELS,
   SORT_LABELS,
 } from "@/features/files/viewUtils";
-import type { FileFilter, GridDensity, LayoutMode, SortField } from "@/features/files/types";
+import type { FileFilter, LayoutMode, SortField } from "@/features/files/types";
 import { IOSSheet } from "@/components/ios/IOSSheet";
 import { IOSListRow } from "@/components/ios/IOSGroupedList";
-import {
-  densityFromColumns,
-  getGridColumnBounds,
-  GRID_DENSITY_LABELS,
-} from "@/lib/gridUtils";
-
-const DENSITY_ORDER: GridDensity[] = ["xs", "sm", "md", "lg", "xl"];
+import { GridSizeControl } from "@/components/file/GridSizeControl";
 
 type IOSFilterSheetProps = {
   open: boolean;
@@ -26,18 +20,12 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
   const fileFilter = useFileStore((s) => s.fileFilter);
   const filterTagId = useFileStore((s) => s.filterTagId);
   const layoutMode = useFileStore((s) => s.layoutMode);
-  const gridColumns = useFileStore((s) => s.gridColumns);
   const allTags = useFileStore((s) => s.allTags);
   const setSortField = useFileStore((s) => s.setSortField);
   const setSortOrder = useFileStore((s) => s.setSortOrder);
   const setFileFilter = useFileStore((s) => s.setFileFilter);
   const setFilterTagId = useFileStore((s) => s.setFilterTagId);
   const setLayoutMode = useFileStore((s) => s.setLayoutMode);
-  const setGridColumns = useFileStore((s) => s.setGridColumns);
-  const setGridDensity = useFileStore((s) => s.setGridDensity);
-
-  const { min, max } = getGridColumnBounds(true);
-  const activeDensity = densityFromColumns(gridColumns);
 
   return (
     <IOSSheet open={open} onClose={onClose} title="表示オプション" tall>
@@ -114,30 +102,7 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
         {layoutMode === "grid" && (
           <section>
             <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">グリッド密度</h3>
-            <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
-              {DENSITY_ORDER.map((density) => (
-                <IOSListRow
-                  key={density}
-                  label={GRID_DENSITY_LABELS[density]}
-                  onPress={() => setGridDensity(density)}
-                  trailing={activeDensity === density ? <span className="text-blue-400">✓</span> : null}
-                />
-              ))}
-            </div>
-            <div className="mt-3 px-1">
-              <label className="flex items-center justify-between text-sm text-neutral-400">
-                <span>{gridColumns} 列</span>
-                <input
-                  type="range"
-                  min={min}
-                  max={max}
-                  value={gridColumns}
-                  onChange={(e) => setGridColumns(Number(e.target.value))}
-                  className="w-40 accent-blue-500"
-                  aria-label="グリッド列数"
-                />
-              </label>
-            </div>
+            <GridSizeControl variant="ios-list" />
           </section>
         )}
       </div>

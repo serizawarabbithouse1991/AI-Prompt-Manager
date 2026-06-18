@@ -5,6 +5,8 @@ import Tauri
 import UIKit
 import UniformTypeIdentifiers
 
+private let photoLibraryExportConcurrency = 4
+
 @available(iOS 14.0, *)
 private class ImportPickerDelegate: NSObject, UIDocumentPickerDelegate {
   private let invoke: Invoke
@@ -89,17 +91,42 @@ private class PhotoImportPickerDelegate: NSObject, PHPickerViewControllerDelegat
     let group = DispatchGroup()
     var paths: [String] = []
     var exportError: String?
+    let pathsLock = NSLock()
+    let semaphore = DispatchSemaphore(value: photoLibraryExportConcurrency)
 
     for (index, result) in results.enumerated() {
       group.enter()
-      exportPhotoResult(result, to: stagingRoot, index: index) { path, error in
-        defer { group.leave() }
-        if let error = error {
-          exportError = error
+      DispatchQueue.global(qos: .utility).async {
+        semaphore.wait()
+        defer {
+          semaphore.signal()
+          group.leave()
+        }
+
+        let exportGroup = DispatchGroup()
+        var path: String?
+        var errorMessage: String?
+
+        exportGroup.enter()
+        self.exportPhotoResult(result, to: stagingRoot, index: index) { exportedPath, error in
+          path = exportedPath
+          errorMessage = error
+          exportGroup.leave()
+        }
+        exportGroup.wait()
+
+        if let errorMessage = errorMessage {
+          pathsLock.lock()
+          if exportError == nil {
+            exportError = errorMessage
+          }
+          pathsLock.unlock()
           return
         }
         if let path = path {
+          pathsLock.lock()
           paths.append(path)
+          pathsLock.unlock()
         }
       }
     }
@@ -298,7 +325,7 @@ class FolderImportPlugin: Plugin {
   private var pickerDelegate: ImportPickerDelegate?
   private var photoPickerDelegate: PhotoImportPickerDelegate?
   private static var photoLibraryExportCancelled = false
-  private static let photoExportConcurrency = 4
+  private static let photoExportConcurrency = photoLibraryExportConcurrency
   private static var photoLibraryScanSessions: [String: PhotoLibraryScanSession] = [:]
   private static let photoLibraryScanSessionsLock = NSLock()
 

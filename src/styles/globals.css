@@ -158,18 +158,6 @@ body {
   --grid-gap: 2px;
 }
 
-[data-platform="ios"][data-viewport="compact"] {
-  --grid-columns: 3;
-}
-
-[data-platform="ios"][data-viewport="regular"] {
-  --grid-columns: 4;
-}
-
-[data-platform="ios"][data-viewport="large"] {
-  --grid-columns: 6;
-}
-
 [data-platform="ios"] body,
 [data-platform="ios"] .ios-shell {
   background: var(--ios-bg);

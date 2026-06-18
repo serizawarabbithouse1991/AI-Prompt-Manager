@@ -149,7 +149,7 @@ function useFileSelection() {
         return;
       }
       if (file.fileKind === "image") {
-        selectFile(fileId);
+        selectFile(fileId, false, { openInspector: false });
         setLightboxFileId(fileId);
         return;
       }

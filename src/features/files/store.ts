@@ -34,6 +34,7 @@ import { formatPhotoScanResult, runPhotoLibraryScan } from "@/lib/photoScan";
 import {
   applyGridColumnsCss,
   clampGridColumns,
+  getDefaultGridColumns,
   GRID_DENSITY_COLUMNS,
 } from "@/lib/gridUtils";
 
@@ -53,7 +54,7 @@ type ViewPrefs = {
 
 function loadViewPrefs(): Partial<ViewPrefs> {
   try {
-    const raw = sessionStorage.getItem(VIEW_PREFS_KEY);
+    const raw = localStorage.getItem(VIEW_PREFS_KEY);
     if (!raw) return {};
     return JSON.parse(raw) as Partial<ViewPrefs>;
   } catch {
@@ -62,7 +63,7 @@ function loadViewPrefs(): Partial<ViewPrefs> {
 }
 
 function saveViewPrefs(prefs: ViewPrefs) {
-  sessionStorage.setItem(VIEW_PREFS_KEY, JSON.stringify(prefs));
+  localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify(prefs));
 }
 
 function loadRecentFolders(): RecentFolder[] {
@@ -162,7 +163,11 @@ type FileStore = {
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
   goUp: () => Promise<void>;
-  selectFile: (fileId: string | null, additive?: boolean) => void;
+  selectFile: (
+    fileId: string | null,
+    additive?: boolean,
+    options?: { openInspector?: boolean },
+  ) => void;
   toggleFileSelection: (fileId: string) => void;
   clearSelection: () => void;
   enterSelectionMode: (fileId: string) => void;
@@ -207,7 +212,7 @@ function findFile(files: FileEntry[], id: string | null): FileEntry | null {
 }
 
 const initialViewPrefs = loadViewPrefs();
-const initialGridColumns = initialViewPrefs.gridColumns ?? 4;
+const initialGridColumns = initialViewPrefs.gridColumns ?? getDefaultGridColumns(false);
 applyGridColumnsCss(initialGridColumns);
 
 export const useFileStore = create<FileStore>((set, get) => ({
@@ -252,7 +257,9 @@ export const useFileStore = create<FileStore>((set, get) => ({
   gridColumns: initialGridColumns,
   setPlatformName: (name) => {
     const isMobile = isMobilePlatform(name);
-    const clamped = clampGridColumns(get().gridColumns, isMobile);
+    const savedCols = loadViewPrefs().gridColumns;
+    const base = savedCols != null ? get().gridColumns : getDefaultGridColumns(isMobile);
+    const clamped = clampGridColumns(base, isMobile);
     applyGridColumnsCss(clamped);
     set({ platformName: name, gridColumns: clamped });
     saveViewPrefs(getViewPrefsFromState(get()));
@@ -494,12 +501,13 @@ export const useFileStore = create<FileStore>((set, get) => ({
     await get().navigateTo(parent);
   },
 
-  selectFile: (fileId, additive = false) => {
+  selectFile: (fileId, additive = false, options) => {
     if (additive && fileId) {
       get().toggleFileSelection(fileId);
       return;
     }
     const file = findFile(get().files, fileId);
+    const openInspector = options?.openInspector ?? fileId !== null;
     set({
       selectedFileId: fileId,
       selectedFileIds: fileId ? [fileId] : [],
@@ -507,7 +515,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
       selectedFile: file,
       metadata: null,
       tags: [],
-      inspectorOpen: fileId !== null,
+      inspectorOpen: fileId !== null && openInspector,
     });
   },
 

@@ -263,18 +263,21 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
     setScanning(true);
     setScanProgress(`${label}中…`);
     setBatchProgress(null);
+    setImportProgress(null);
     setLastResult(null);
     try {
       const result = await importPaths(paths, { novelaiOnly });
       const message = formatImportResult(result, novelaiOnly);
       setScanProgress(message);
       setBatchProgress(null);
+      setImportProgress(null);
       setLastResult(message);
       toast(message, "success");
       await setViewMode("ai-library");
     } catch (e) {
       const message = String(e);
       setScanProgress(message);
+      setImportProgress(null);
       setLastResult(message);
     } finally {
       setScanning(false);

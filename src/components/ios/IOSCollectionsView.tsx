@@ -1,6 +1,7 @@
 import { CollectionsPanel } from "@/components/collections/CollectionsPanel";
 import { FileBrowser } from "@/components/file/FileBrowser";
 import { IOSNavBar } from "@/components/ios/IOSNavBar";
+import { IOSNavTrailingWithGrid } from "@/components/ios/IOSGridSizeNavButton";
 import { useFileStore } from "@/features/files/store";
 
 export function IOSCollectionsView() {
@@ -18,6 +19,7 @@ export function IOSCollectionsView() {
           largeTitle={false}
           onBack={() => setSelectedCollectionId(null)}
           backLabel="コレクション"
+          trailing={<IOSNavTrailingWithGrid />}
         />
         <div className="min-h-0 flex-1 overflow-hidden">
           <FileBrowser />

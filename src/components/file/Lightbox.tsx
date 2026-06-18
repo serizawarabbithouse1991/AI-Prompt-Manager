@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDisplayFiles, useFileStore } from "@/features/files/store";
-import { IconChevronLeft, IconChevronRight, IconInfo } from "@/components/ui/Icons";
-import { isIOSPlatform } from "@/lib/platform";
+import { FileDetailContent } from "@/components/file/FileDetailContent";
+import { IconChevronLeft, IconChevronRight } from "@/components/ui/Icons";
+import { isIOSPlatform, isMobilePlatform } from "@/lib/platform";
 
 const SWIPE_THRESHOLD_PX = 50;
 
@@ -14,6 +15,7 @@ export function Lightbox() {
   const displayFiles = useDisplayFiles();
   const platformName = useFileStore((s) => s.platformName);
   const isIOS = isIOSPlatform(platformName);
+  const isMobile = isMobilePlatform(platformName);
   const swipeAreaRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const dragOffsetRef = useRef(0);
@@ -36,6 +38,11 @@ export function Lightbox() {
   }, [lightboxFileId]);
 
   useEffect(() => {
+    if (!isMobile || !lightboxFileId) return;
+    selectFile(lightboxFileId, false, { openInspector: false });
+  }, [lightboxFileId, isMobile, selectFile]);
+
+  useEffect(() => {
     dragOffsetRef.current = 0;
     setDragOffset(0);
     touchStartRef.current = null;
@@ -45,7 +52,7 @@ export function Lightbox() {
   useEffect(() => {
     if (!lightboxFileId) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setLightboxFileId(null);
+      if (e.key === "Escape") closeLightbox();
       if (e.key === "ArrowLeft" && currentIndex > 0) {
         setLightboxFileId(images[currentIndex - 1].id);
       }
@@ -76,7 +83,7 @@ export function Lightbox() {
       const dx = touch.clientX - start.x;
       const dy = touch.clientY - start.y;
 
-      if (isIOS && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
+      if (isIOS && !isMobile && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
         e.preventDefault();
         dragOffsetRef.current = dy;
         setDragOffset(dy);
@@ -99,8 +106,8 @@ export function Lightbox() {
       dragOffsetRef.current = 0;
       setDragOffset(0);
 
-      if (isIOS && offset > 50) {
-        setLightboxFileId(null);
+      if (isIOS && !isMobile && offset > 50) {
+        closeLightbox();
         return;
       }
 
@@ -122,7 +129,7 @@ export function Lightbox() {
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [lightboxFileId, currentIndex, images, setLightboxFileId, isIOS]);
+  }, [lightboxFileId, currentIndex, images, setLightboxFileId, isIOS, isMobile]);
 
   if (!lightboxFileId || !current) return null;
 
@@ -134,18 +141,83 @@ export function Lightbox() {
     if (currentIndex < images.length - 1) setLightboxFileId(images[currentIndex + 1].id);
   };
 
-  function openInspector() {
-    if (!current) return;
-    selectFile(current.id);
+  function closeLightbox() {
     setLightboxFileId(null);
-    setInspectorOpen(true);
+    setInspectorOpen(false);
+  }
+
+  const imageStyle = {
+    maxHeight: isMobile
+      ? "min(52dvh, 480px)"
+      : "calc(100dvh - var(--safe-top) - var(--safe-bottom) - 4.5rem)",
+    transform:
+      dragOffset !== 0
+        ? isIOS && !isMobile
+          ? `translateY(${dragOffset}px)`
+          : `translateX(${dragOffset}px)`
+        : undefined,
+    transition: dragOffset === 0 ? "transform 0.2s ease-out" : undefined,
+    opacity: isIOS && !isMobile && dragOffset > 0 ? Math.max(0.3, 1 - dragOffset / 300) : undefined,
+  };
+
+  if (isMobile) {
+    return (
+      <div
+        className={[
+          "ios-lightbox fixed inset-0 z-[65] flex flex-col bg-black transition-opacity duration-200",
+          visible ? "opacity-100" : "opacity-0",
+        ].join(" ")}
+        style={{
+          paddingLeft: "var(--safe-left)",
+          paddingRight: "var(--safe-right)",
+        }}
+      >
+        <div
+          className="flex shrink-0 items-center border-b border-white/10 bg-black/80 px-2 backdrop-blur-md"
+          style={{ paddingTop: "var(--safe-top)" }}
+        >
+          <button
+            type="button"
+            onClick={closeLightbox}
+            className="flex min-h-11 items-center gap-0.5 px-2 text-base font-medium text-blue-400"
+          >
+            <IconChevronLeft className="h-5 w-5" />
+            戻る
+          </button>
+          {images.length > 1 && (
+            <span className="ml-auto rounded-full bg-white/15 px-3 py-1 text-sm text-white/90">
+              {currentIndex + 1} / {images.length}
+            </span>
+          )}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div
+            ref={swipeAreaRef}
+            className="relative flex touch-none items-center justify-center bg-black px-2 py-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={convertFileSrc(current.absolutePath)}
+              alt={current.displayName}
+              className="max-w-full select-none object-contain animate-fade-in"
+              draggable={false}
+              style={imageStyle}
+            />
+          </div>
+
+          <div className="rounded-t-2xl bg-neutral-950">
+            <FileDetailContent file={current} showPreview={false} />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div
       className={[
-        "fixed inset-0 flex items-center justify-center transition-opacity duration-200",
-        isIOS ? "ios-lightbox z-[65] bg-black" : "z-50 touch-none bg-black/90",
+        "fixed inset-0 z-50 flex items-center justify-center touch-none bg-black/90 transition-opacity duration-200",
         visible ? "opacity-100" : "opacity-0",
       ].join(" ")}
       style={{
@@ -154,69 +226,24 @@ export function Lightbox() {
         paddingLeft: "var(--safe-left)",
         paddingRight: "var(--safe-right)",
       }}
-      onClick={() => setLightboxFileId(null)}
+      onClick={closeLightbox}
     >
-      {isIOS ? (
-        <div
-          className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-2"
-          style={{ paddingTop: "var(--safe-top)" }}
-        >
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxFileId(null);
-            }}
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-base font-medium text-blue-400"
-          >
-            完了
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              openInspector();
-            }}
-            className="flex min-h-11 items-center gap-1 rounded-full px-3 text-base text-blue-400"
-          >
-            <IconInfo className="h-4 w-4" />
-            詳細
-          </button>
-        </div>
-      ) : (
-        <>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxFileId(null);
-            }}
-            className="absolute z-10 rounded bg-neutral-800 px-3 py-1 text-body hover:bg-neutral-700 focus-ring"
-            style={{
-              top: "calc(var(--safe-top) + 0.75rem)",
-              right: "calc(var(--safe-right) + 0.75rem)",
-            }}
-          >
-            閉じる
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              openInspector();
-            }}
-            className="absolute z-10 flex items-center gap-1 rounded bg-neutral-800 px-3 py-1.5 text-body hover:bg-neutral-700 focus-ring lg:hidden"
-            style={{
-              top: "calc(var(--safe-top) + 0.75rem)",
-              left: "calc(var(--safe-left) + 0.75rem)",
-            }}
-          >
-            <IconInfo className="h-4 w-4" />
-            詳細
-          </button>
-        </>
-      )}
-      {currentIndex > 0 && !isIOS && (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          closeLightbox();
+        }}
+        className="absolute z-10 flex items-center gap-1 rounded bg-neutral-800 px-3 py-1.5 text-body hover:bg-neutral-700 focus-ring"
+        style={{
+          top: "calc(var(--safe-top) + 0.75rem)",
+          left: "calc(var(--safe-left) + 0.75rem)",
+        }}
+      >
+        <IconChevronLeft className="h-4 w-4" />
+        戻る
+      </button>
+      {currentIndex > 0 && (
         <button
           type="button"
           onClick={(e) => {
@@ -229,7 +256,7 @@ export function Lightbox() {
           <IconChevronLeft className="h-6 w-6" />
         </button>
       )}
-      {currentIndex < images.length - 1 && !isIOS && (
+      {currentIndex < images.length - 1 && (
         <button
           type="button"
           onClick={(e) => {
@@ -252,19 +279,9 @@ export function Lightbox() {
           alt={current.displayName}
           className="max-w-full select-none object-contain animate-fade-in"
           draggable={false}
-          style={{
-            maxHeight: "calc(100dvh - var(--safe-top) - var(--safe-bottom) - 4.5rem)",
-            transform:
-              dragOffset !== 0
-                ? isIOS
-                  ? `translateY(${dragOffset}px)`
-                  : `translateX(${dragOffset}px)`
-                : undefined,
-            transition: dragOffset === 0 ? "transform 0.2s ease-out" : undefined,
-            opacity: isIOS && dragOffset > 0 ? Math.max(0.3, 1 - dragOffset / 300) : undefined,
-          }}
+          style={imageStyle}
         />
-        {promptPreview && !isIOS && (
+        {promptPreview && (
           <button
             type="button"
             onClick={(e) => {
@@ -286,25 +303,14 @@ export function Lightbox() {
         )}
       </div>
       <div
-        className={[
-          "pointer-events-none absolute left-1/2 max-w-[90vw] -translate-x-1/2 truncate text-center text-body",
-          isIOS ? "ios-lightbox-indicator text-white/90" : "text-neutral-300",
-        ].join(" ")}
-        style={{ bottom: isIOS ? "calc(var(--safe-bottom) + 2rem)" : "calc(var(--safe-bottom) + 1rem)" }}
+        className="pointer-events-none absolute left-1/2 max-w-[90vw] -translate-x-1/2 truncate text-center text-body text-neutral-300"
+        style={{ bottom: "calc(var(--safe-bottom) + 1rem)" }}
       >
-        {isIOS && images.length > 1 ? (
-          <span className="rounded-full bg-white/15 px-3 py-1 text-sm backdrop-blur-sm">
+        {current.displayName}
+        {images.length > 1 && (
+          <span className="ml-2 text-neutral-500">
             {currentIndex + 1} / {images.length}
           </span>
-        ) : (
-          <>
-            {current.displayName}
-            {images.length > 1 && (
-              <span className="ml-2 text-neutral-500">
-                {currentIndex + 1} / {images.length}
-              </span>
-            )}
-          </>
         )}
       </div>
     </div>

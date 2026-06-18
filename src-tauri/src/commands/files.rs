@@ -213,12 +213,51 @@ pub async fn import_paths(
     paths: Vec<String>,
     novelai_only: Option<bool>,
 ) -> Result<ImportResult, String> {
+    use std::time::Instant;
+
     let app_data = app_data_dir(&app)?;
     let dest = ai_library_dir(&app_data);
     let novelai_only = novelai_only.unwrap_or(false);
-    with_conn(&app, |conn| {
-        import_service::import_paths(conn, &app_data, &dest, &paths, novelai_only)
-    })
+    let options = import_service::ImportOptions::bulk(novelai_only);
+    let targets = paths.len().max(1);
+    let app_handle = app.clone();
+
+    emit_import_progress(
+        &app,
+        0,
+        targets,
+        "取込を開始",
+        "import",
+        0,
+        0,
+        None,
+    );
+
+    let import_start = Instant::now();
+    let result = with_conn(&app, |conn| {
+        import_service::import_paths_with_progress(
+            conn,
+            &app_data,
+            &dest,
+            &paths,
+            options,
+            |current, total, message, partial| {
+                let eta = compute_eta_seconds(current, total, import_start.elapsed().as_secs_f64());
+                emit_import_progress(
+                    &app_handle,
+                    current,
+                    total,
+                    message,
+                    "import",
+                    partial.novelai_count,
+                    partial.skipped_count,
+                    eta,
+                );
+            },
+        )
+    })?;
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -318,7 +357,7 @@ pub async fn scan_photo_library_novelai(
             &app_data,
             &dest,
             &staged,
-            true,
+            import_service::ImportOptions::bulk(true),
             |current, total, message, partial| {
                 let eta = compute_eta_seconds(current, total, import_start.elapsed().as_secs_f64());
                 emit_import_progress(

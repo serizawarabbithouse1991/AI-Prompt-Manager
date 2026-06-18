@@ -132,7 +132,9 @@ pub fn is_novelai_metadata(meta: &AIGenerationMetadata) -> bool {
 
 pub fn detect_novelai_from_file(path: &str) -> Result<bool, String> {
     let file_id = path_to_id(path);
-    Ok(extract_from_file(path, &file_id)?.map(|m| is_novelai_metadata(&m)).unwrap_or(false))
+    Ok(extract_from_file(path, &file_id)?
+        .map(|m| is_novelai_metadata(&m))
+        .unwrap_or(false))
 }
 
 fn truncate_prompt(text: &str) -> String {

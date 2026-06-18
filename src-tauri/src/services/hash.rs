@@ -1,4 +1,5 @@
 use sha2::{Digest, Sha256};
+use std::io::{Read, Write};
 use std::path::Path;
 use uuid::{uuid, Uuid};
 
@@ -14,9 +15,43 @@ pub fn metadata_id_for_file(file_id: &str) -> String {
 }
 
 pub fn file_content_hash(path: &Path) -> Result<String, String> {
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    file_content_hash_streaming(path)
+}
+
+pub fn file_content_hash_streaming(path: &Path) -> Result<String, String> {
+    use std::fs::File;
+
+    let mut file = File::open(path).map_err(|e| e.to_string())?;
     let mut hasher = Sha256::new();
-    hasher.update(bytes);
+    let mut buffer = [0u8; 65_536];
+    loop {
+        let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Copy a file to `dest` while computing its SHA-256 in a single pass.
+pub fn copy_file_with_content_hash(src: &Path, dest: &Path) -> Result<String, String> {
+    use std::fs::File;
+
+    let mut src_file = File::open(src).map_err(|e| e.to_string())?;
+    let mut dest_file = File::create(dest).map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 65_536];
+    loop {
+        let read = src_file.read(&mut buffer).map_err(|e| e.to_string())?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        dest_file
+            .write_all(&buffer[..read])
+            .map_err(|e| e.to_string())?;
+    }
     Ok(format!("{:x}", hasher.finalize()))
 }
 

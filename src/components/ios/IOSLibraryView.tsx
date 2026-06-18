@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FileBrowser } from "@/components/file/FileBrowser";
 import { IOSNavBar, IOSNavIconButton } from "@/components/ios/IOSNavBar";
 import { IOSFilterSheet } from "@/components/ios/IOSFilterSheet";
+import { IOSNavTrailingWithGrid } from "@/components/ios/IOSGridSizeNavButton";
 import { useFileStore } from "@/features/files/store";
 import { IconRefresh } from "@/components/ui/Icons";
 
@@ -39,7 +40,7 @@ export function IOSLibraryView({ title }: IOSLibraryViewProps) {
       <IOSNavBar
         title={title}
         trailing={
-          <>
+          <IOSNavTrailingWithGrid>
             <IOSNavIconButton label="検索" onClick={() => setSearchOpen((v) => !v)}>
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="7" />
@@ -54,7 +55,7 @@ export function IOSLibraryView({ title }: IOSLibraryViewProps) {
             <IOSNavIconButton label="更新" onClick={() => void handleRefresh()} disabled={refreshing}>
               <IconRefresh className={["h-5 w-5", refreshing ? "animate-spin" : ""].join(" ")} />
             </IOSNavIconButton>
-          </>
+          </IOSNavTrailingWithGrid>
         }
       />
       {searchOpen && (

@@ -5,6 +5,7 @@ import {
   SORT_LABELS,
 } from "@/features/files/viewUtils";
 import type { FileFilter, LayoutMode, SortField, SortOrder } from "@/features/files/types";
+import { GridSizeControl } from "@/components/file/GridSizeControl";
 
 export function ViewControls() {
   const sortField = useFileStore((s) => s.sortField);
@@ -24,7 +25,7 @@ export function ViewControls() {
 
   return (
     <div className="flex flex-nowrap items-center gap-2 overflow-x-auto border-b border-neutral-800 px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:px-4 sm:py-2 [&::-webkit-scrollbar]:hidden">
-      <label className="flex items-center gap-1 text-xs text-neutral-500">
+      <label className="flex items-center gap-1 text-caption text-neutral-500">
         並び
         <select
           value={sortField}
@@ -47,7 +48,7 @@ export function ViewControls() {
         </select>
       </label>
 
-      <label className="flex items-center gap-1 text-xs text-neutral-500">
+      <label className="flex items-center gap-1 text-caption text-neutral-500">
         表示
         <select
           value={fileFilter}
@@ -70,7 +71,7 @@ export function ViewControls() {
         <select
           value={filterTagId ?? ""}
           onChange={(e) => setFilterTagId(e.target.value || null)}
-          className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200"
+          className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-caption text-neutral-200"
         >
           <option value="">タグを選択</option>
           {allTags.map((tag) => (
@@ -81,6 +82,8 @@ export function ViewControls() {
         </select>
       )}
 
+      {layoutMode === "grid" && <GridSizeControl variant="desktop" />}
+
       <div className="ml-auto flex shrink-0 gap-1">
         {(Object.keys(LAYOUT_LABELS) as LayoutMode[]).map((mode) => (
           <button
@@ -88,7 +91,7 @@ export function ViewControls() {
             type="button"
             onClick={() => setLayoutMode(mode)}
             className={[
-              "rounded border px-2 py-1 text-xs",
+              "rounded border px-2 py-1 text-caption",
               layoutMode === mode
                 ? "border-blue-500 bg-blue-500/10 text-blue-300"
                 : "border-neutral-700 text-neutral-400 hover:bg-neutral-800",
