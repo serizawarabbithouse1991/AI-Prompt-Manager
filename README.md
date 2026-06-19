@@ -43,7 +43,9 @@ src-tauri/target/release/bundle/nsis/AI File Manager_*_x64-setup.exe
 
 ### GitHub Release（Windows）
 
-`v*` 形式の tag を push すると [`.github/workflows/release-windows.yml`](.github/workflows/release-windows.yml) が Windows インストーラをビルドし、GitHub Release に添付します。
+Windows 向けインストーラは [GitHub Releases](https://github.com/serizawarabbithouse1991/AI-Prompt-Manager/releases) からダウンロードできます。最新の `*-setup.exe` を取得して実行してください。
+
+リリース用ビルドは `v*` 形式の tag を push すると [`.github/workflows/release-windows.yml`](.github/workflows/release-windows.yml) が自動実行され、GitHub Release にインストーラが添付されます。
 
 ```bash
 git tag v0.1.0
