@@ -27,6 +27,10 @@ export function Toolbar() {
   const searchScope = useFileStore((s) => s.searchScope);
   const searchTagId = useFileStore((s) => s.searchTagId);
   const setSearchScope = useFileStore((s) => s.setSearchScope);
+  const allTags = useFileStore((s) => s.allTags);
+  const setSearchTagId = useFileStore((s) => s.setSearchTagId);
+
+  const selectedSearchTag = allTags.find((tag) => tag.id === searchTagId) ?? null;
 
   useEffect(() => {
     const input = document.getElementById("search-input") as HTMLInputElement | null;
@@ -88,18 +92,34 @@ export function Toolbar() {
           </button>
         </>
       )}
-      <input
-        id="search-input"
-        type="search"
-        placeholder="検索…"
-        className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-1 text-sm"
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            const value = (e.target as HTMLInputElement).value.trim();
-            if (value || searchTagId) void runSearch(value);
-          }
-        }}
-      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <input
+          id="search-input"
+          type="search"
+          placeholder="検索… (#タグ名 でタグ検索)"
+          className="min-w-0 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1 text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const value = (e.target as HTMLInputElement).value.trim();
+              if (value || searchTagId) void runSearch(value);
+            }
+          }}
+        />
+        {selectedSearchTag && (
+          <span className="inline-flex w-fit items-center gap-1 rounded-full bg-neutral-800 px-2 py-0.5 text-xs">
+            <span className="text-neutral-500">#</span>
+            {selectedSearchTag.name}
+            <button
+              type="button"
+              onClick={() => setSearchTagId(null)}
+              className="text-neutral-500 hover:text-neutral-300"
+              aria-label="検索タグを解除"
+            >
+              ×
+            </button>
+          </span>
+        )}
+      </div>
       <label className="hidden items-center gap-1 text-xs text-neutral-500 md:flex">
         <input
           type="checkbox"

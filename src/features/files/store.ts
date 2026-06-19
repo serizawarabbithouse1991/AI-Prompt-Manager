@@ -16,6 +16,7 @@ import type {
 } from "@/features/files/types";
 import type { AIGenerationMetadata } from "@/features/metadata/types";
 import type { Tag } from "@/features/tags/types";
+import { parseTagSearchQuery } from "@/features/files/searchQuery";
 import { filterFilesByQuery, getDisplayFiles } from "@/features/files/viewUtils";
 import {
   getSpecialPaths,
@@ -687,20 +688,37 @@ export const useFileStore = create<FileStore>((set, get) => ({
       files,
       searchSourceApp,
       searchModel,
-      searchTagId,
+      searchTagId: currentSearchTagId,
       allTags,
     } = get();
-    const trimmed = query.trim();
-    if (searchScope === "global" && !trimmed && !searchTagId) {
+
+    const raw = query.trim();
+    const parsed = parseTagSearchQuery(raw, allTags);
+    const usesHashSyntax = raw.startsWith("#");
+    const effectiveSearchTagId = usesHashSyntax ? parsed.tagId : currentSearchTagId;
+    const trimmed = usesHashSyntax
+      ? parsed.tagId
+        ? parsed.query
+        : raw
+      : raw;
+
+    if (searchScope === "global" && !trimmed && !effectiveSearchTagId) {
       if (viewMode === "search") {
         await get().setViewMode("browse");
       }
       return;
     }
+
+    if (usesHashSyntax && effectiveSearchTagId !== currentSearchTagId) {
+      set({ searchTagId: effectiveSearchTagId });
+      saveViewPrefs(getViewPrefsFromState({ ...get(), searchTagId: effectiveSearchTagId }));
+    }
+
     set({
       loading: true,
       error: null,
       searchQuery: trimmed,
+      searchTagId: effectiveSearchTagId,
       viewMode: "search",
       selectedFileIds: [],
       selectionMode: false,
@@ -720,8 +738,8 @@ export const useFileStore = create<FileStore>((set, get) => ({
           baseFiles = await listCollectionFiles(get().selectedCollectionId!);
         }
         let filtered = filterFilesByQuery(baseFiles, trimmed, true, allTags);
-        if (searchTagId) {
-          filtered = filtered.filter((file) => file.tagIds?.includes(searchTagId) ?? false);
+        if (effectiveSearchTagId) {
+          filtered = filtered.filter((file) => file.tagIds?.includes(effectiveSearchTagId) ?? false);
         }
         set({
           files: filtered,
@@ -735,7 +753,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
       const results = await searchFiles(trimmed, {
         sourceApp: searchSourceApp || null,
         model: searchModel || null,
-        tagId: searchTagId || null,
+        tagId: effectiveSearchTagId || null,
         limit: 50,
         offset: 0,
       });
