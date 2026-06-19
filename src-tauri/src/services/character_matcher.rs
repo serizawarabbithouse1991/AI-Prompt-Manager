@@ -135,6 +135,18 @@ const QUALITY_TAGS: &[&str] = &[
     "incredibly detailed",
     "official art",
     "best illustration",
+    // 実DBで大量付与されていた品質・解像度系（runtime evidence）
+    "8k",
+    "4k",
+    "16k",
+    "hyper quality",
+    "masterpiece quality",
+    "quality enhancement",
+    "noise reduction",
+    "super resolution",
+    "hyper realistic",
+    "photorealistic",
+    "no text",
 ];
 
 /// 与えられた正規化済みタグが品質タグかどうかを判定する。
@@ -483,6 +495,8 @@ mod tests {
         assert!(is_quality_tag("masterpiece"));
         assert!(is_quality_tag("best quality"));
         assert!(is_quality_tag("ultra-detailed"));
+        assert!(is_quality_tag("8k"));
+        assert!(is_quality_tag("hyper quality"));
         assert!(!is_quality_tag("1girl"));
         assert!(!is_quality_tag("hatsune miku"));
     }

@@ -2,7 +2,9 @@ use rusqlite::{params, Connection};
 
 use crate::db::repositories::tags as tags_repo;
 use crate::models::prompt_tag::{BatchTagApplyResult, PromptTagSettings, TagApplyResult};
-use crate::services::character_matcher::{filter_quality_tags, tokenize_prompt, SKIP_NO_PROMPT};
+use crate::services::character_matcher::{
+    filter_quality_tags, is_quality_tag, normalize_tag, tokenize_prompt, SKIP_NO_PROMPT,
+};
 use crate::services::danbooru_index::{
     find_characters_in_prompt, get_setting, is_cache_ready, set_setting,
     SKIP_CACHE_NOT_READY,
@@ -70,6 +72,21 @@ pub fn set_prompt_tag_settings(
     Ok(())
 }
 
+fn prune_auto_quality_tags(conn: &Connection, file_id: &str) -> Result<u32, String> {
+    let tags = tags_repo::get_file_tags(conn, file_id)?;
+    let mut removed = 0u32;
+    for tag in tags {
+        if tag.kind != "auto" {
+            continue;
+        }
+        if is_quality_tag(&normalize_tag(&tag.name)) {
+            tags_repo::remove_tag_from_file(conn, file_id, &tag.id)?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
 pub fn resolve_tags(
     conn: &Connection,
     prompt: &str,
@@ -133,6 +150,13 @@ pub fn apply_prompt_tags_for_file(
     let exclude_quality = get_prompt_tag_settings(conn)
         .map(|s| s.exclude_quality_tags)
         .unwrap_or(true);
+
+    let _tags_pruned = if exclude_quality {
+        prune_auto_quality_tags(conn, file_id)?
+    } else {
+        0
+    };
+
     let tag_names = match resolve_tags(conn, &prompt, mode, exclude_quality) {
         Ok(names) => names,
         Err(reason) if reason == SKIP_CACHE_NOT_READY => {
@@ -227,13 +251,22 @@ pub fn batch_apply_prompt_tags(
             continue;
         };
 
+        let _tags_pruned = if exclude_quality {
+            prune_auto_quality_tags(conn, &file_id)?
+        } else {
+            0
+        };
+
         let tag_names = resolve_tags(conn, &prompt, mode, exclude_quality)?;
-        if tag_names.is_empty() {
+        if tag_names.is_empty() && _tags_pruned == 0 {
             continue;
         }
 
-        let (added, skipped) =
-            tags_repo::add_auto_tags_to_file(conn, &file_id, &absolute_path, &tag_names)?;
+        let (added, skipped) = if tag_names.is_empty() {
+            (0, 0)
+        } else {
+            tags_repo::add_auto_tags_to_file(conn, &file_id, &absolute_path, &tag_names)?
+        };
         result.tags_added += added;
         result.tags_skipped += skipped;
     }
@@ -366,6 +399,25 @@ mod tests {
         set_prompt_tag_settings(&conn, "all", true, false).unwrap();
         apply_prompt_tags_for_file(&conn, "f1", "/tmp/test.png", PromptTagMode::All).unwrap();
         assert!(tag_exists(&conn, "masterpiece"));
+    }
+
+    fn file_has_tag(conn: &Connection, file_id: &str, name: &str) -> bool {
+        tags_repo::get_file_tags(conn, file_id)
+            .map(|tags| tags.iter().any(|t| t.name == name))
+            .unwrap_or(false)
+    }
+
+    #[test]
+    fn apply_prunes_existing_auto_quality_tags() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_db(&conn);
+        let masterpiece = tags_repo::get_or_create_tag(&conn, "masterpiece", "auto").unwrap();
+        tags_repo::add_tag_to_file(&conn, "f1", &masterpiece.id).unwrap();
+        assert!(file_has_tag(&conn, "f1", "masterpiece"));
+
+        apply_prompt_tags_for_file(&conn, "f1", "/tmp/test.png", PromptTagMode::All).unwrap();
+
+        assert!(!file_has_tag(&conn, "f1", "masterpiece"));
     }
 
     #[test]

@@ -554,6 +554,11 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
             checked={promptTagSettings?.autoTagOnImport ?? true}
             onChange={(v) => void handleAutoTagOnImportToggle(v)}
           />
+          <IOSSwitch
+            label="品質タグ（masterpiece 等）を除外"
+            checked={promptTagSettings?.excludeQualityTags ?? true}
+            onChange={(v) => void handleExcludeQualityTagsToggle(v)}
+          />
           <IOSListRow
             label={batchTagRunning ? "タグ付け中…" : "ライブラリ全体にタグ付け"}
             onPress={() => void handleBatchApplyPromptTags()}
@@ -760,6 +765,9 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
             />
             品質タグ（masterpiece 等）を除外
           </label>
+          <p className="text-[11px] text-neutral-500">
+            ON のとき、タグ付け時に masterpiece / 8k などの品質タグを付けず、既存の auto 品質タグも削除します。
+          </p>
           <button
             type="button"
             disabled={batchTagRunning}

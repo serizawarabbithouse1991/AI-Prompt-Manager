@@ -67,21 +67,6 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
     setApplying(true);
     try {
       const result = await applyPromptTagsForFile(fileId, absolutePath);
-      // #region agent log
-      fetch("http://127.0.0.1:7320/ingest/347134e6-6e1f-40fb-aee0-563e8b0e88ea", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d70361" },
-        body: JSON.stringify({
-          sessionId: "d70361",
-          location: "TagEditor.tsx:handleApplyFromPrompt",
-          message: "apply prompt tags result",
-          hypothesisId: "D",
-          data: { fileId, result, tagCount: tags.length },
-          timestamp: Date.now(),
-          runId: "initial",
-        }),
-      }).catch(() => {});
-      // #endregion
       if (result.skipReason) {
         toast(formatSkipReason(result.skipReason), "error");
         return;
