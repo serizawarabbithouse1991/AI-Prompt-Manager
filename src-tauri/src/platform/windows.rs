@@ -33,8 +33,9 @@ pub fn get_special_paths(app_data: &Path) -> Result<SpecialPaths, String> {
 }
 
 pub fn reveal_in_file_manager(path: &str) -> Result<(), String> {
+    let normalized = path.replace('/', "\\");
     std::process::Command::new("explorer")
-        .args(["/select,", path])
+        .arg(format!(r"/select,{normalized}"))
         .spawn()
         .map_err(|e| e.to_string())?;
     Ok(())
