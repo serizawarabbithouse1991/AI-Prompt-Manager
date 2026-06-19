@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -15,7 +15,7 @@ pub const SKIP_CACHE_NOT_READY: &str = "cache_not_ready";
 
 struct CharacterMemoryIndex {
     normalized: HashSet<String>,
-    by_length_desc: Vec<String>,
+    canonical_names: HashMap<String, String>,
 }
 
 static MEMORY_INDEX: Mutex<Option<CharacterMemoryIndex>> = Mutex::new(None);
@@ -28,24 +28,23 @@ pub fn invalidate_memory_index() {
 
 fn load_memory_index(conn: &Connection) -> Result<(), String> {
     let mut normalized = HashSet::new();
+    let mut canonical_names = HashMap::new();
     let mut stmt = conn
-        .prepare("SELECT normalized FROM danbooru_character_tags")
+        .prepare("SELECT name, normalized FROM danbooru_character_tags")
         .map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map([], |row| row.get::<_, String>(0))
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
         .map_err(|e| e.to_string())?;
     for row in rows {
-        let tag = row.map_err(|e| e.to_string())?;
-        normalized.insert(tag);
+        let (name, tag) = row.map_err(|e| e.to_string())?;
+        normalized.insert(tag.clone());
+        canonical_names.entry(tag).or_insert(name);
     }
-
-    let mut by_length_desc: Vec<String> = normalized.iter().cloned().collect();
-    by_length_desc.sort_by_key(|tag| std::cmp::Reverse(tag.len()));
 
     let mut guard = MEMORY_INDEX.lock().map_err(|e| e.to_string())?;
     *guard = Some(CharacterMemoryIndex {
         normalized,
-        by_length_desc,
+        canonical_names,
     });
     Ok(())
 }
@@ -274,15 +273,15 @@ pub fn find_characters_in_prompt(
     prompt: &str,
     tags: &[String],
 ) -> Result<Vec<String>, String> {
-    if !is_cache_ready(conn)? {
-        return Ok(Vec::new());
-    }
     ensure_memory_index(conn)?;
 
     let guard = MEMORY_INDEX.lock().map_err(|e| e.to_string())?;
     let Some(index) = guard.as_ref() else {
         return Ok(Vec::new());
     };
+    if index.normalized.is_empty() {
+        return Ok(Vec::new());
+    }
 
     let mut matched = HashSet::new();
     let candidates = expand_tag_candidates(tags);
@@ -294,12 +293,29 @@ pub fn find_characters_in_prompt(
     }
 
     let norm_prompt = normalize_tag(prompt);
-    for tag in &index.by_length_desc {
-        if tag.len() < 2 {
+    let word_source: String = norm_prompt
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == ' ' {
+                c
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    let words: Vec<&str> = word_source.split_whitespace().collect();
+    for window in 2..=4 {
+        if words.len() < window {
             continue;
         }
-        if norm_prompt.contains(tag.as_str()) {
-            matched.insert(tag.clone());
+        for i in 0..=words.len() - window {
+            let joined = words[i..i + window].join(" ");
+            if joined.len() < 2 {
+                continue;
+            }
+            if index.normalized.contains(&joined) {
+                matched.insert(joined);
+            }
         }
     }
 
@@ -344,14 +360,14 @@ pub fn filter_character_tags(conn: &Connection, tags: &[String]) -> Result<Vec<S
 }
 
 pub fn canonical_name_for_tag(conn: &Connection, normalized: &str) -> Result<String, String> {
-    match conn.query_row(
-        "SELECT name FROM danbooru_character_tags WHERE normalized = ?1 LIMIT 1",
-        params![normalized],
-        |row| row.get::<_, String>(0),
-    ) {
-        Ok(name) => Ok(name),
-        Err(_) => Ok(normalized.to_string()),
+    ensure_memory_index(conn)?;
+    let guard = MEMORY_INDEX.lock().map_err(|e| e.to_string())?;
+    if let Some(index) = guard.as_ref() {
+        if let Some(name) = index.canonical_names.get(normalized) {
+            return Ok(name.clone());
+        }
     }
+    Ok(normalized.to_string())
 }
 
 #[cfg(test)]
@@ -386,6 +402,26 @@ mod tests {
         let matched =
             find_characters_in_prompt(&conn, "1girl, hatsune miku, masterpiece", &tags).unwrap();
         assert!(matched.contains(&"hatsune miku".to_string()));
+    }
+
+    #[test]
+    fn find_characters_matches_unpunctuated_phrase() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_cache(&conn);
+        let tags = tokenize_for_test("1girl hatsune miku standing");
+        let matched =
+            find_characters_in_prompt(&conn, "1girl hatsune miku standing", &tags).unwrap();
+        assert!(matched.contains(&"hatsune miku".to_string()));
+    }
+
+    #[test]
+    fn canonical_name_uses_memory_index() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_cache(&conn);
+        assert_eq!(
+            canonical_name_for_tag(&conn, "hatsune miku").unwrap(),
+            "hatsune_miku"
+        );
     }
 
     #[test]

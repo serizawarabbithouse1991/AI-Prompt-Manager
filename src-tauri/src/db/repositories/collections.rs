@@ -1,4 +1,6 @@
 use rusqlite::{params, Connection};
+use std::collections::HashMap;
+use std::sync::Mutex;
 use uuid::Uuid;
 
 use crate::db::connection::now_iso;
@@ -11,6 +13,48 @@ use crate::services::character_matcher::normalize_tag;
 pub struct SmartCollectionRule {
     pub id: String,
     pub match_keywords: Vec<String>,
+}
+
+static SMART_RULES_CACHE: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+
+pub fn invalidate_smart_rules_cache() {
+    if let Ok(mut guard) = SMART_RULES_CACHE.lock() {
+        *guard = None;
+    }
+}
+
+fn load_smart_rules_cache(conn: &Connection) -> Result<HashMap<String, String>, String> {
+    let rules = list_smart_collection_rules(conn)?;
+    let mut map = HashMap::new();
+    for rule in rules {
+        for keyword in &rule.match_keywords {
+            map.insert(normalize_tag(keyword), rule.id.clone());
+        }
+    }
+    Ok(map)
+}
+
+pub fn ensure_smart_rules_cache(conn: &Connection) -> Result<(), String> {
+    let needs_load = SMART_RULES_CACHE
+        .lock()
+        .map_err(|e| e.to_string())?
+        .is_none();
+    if needs_load {
+        let map = load_smart_rules_cache(conn)?;
+        let mut guard = SMART_RULES_CACHE.lock().map_err(|e| e.to_string())?;
+        *guard = Some(map);
+    }
+    Ok(())
+}
+
+fn register_smart_rule_in_cache(keywords: &[String], collection_id: &str) -> Result<(), String> {
+    let mut guard = SMART_RULES_CACHE.lock().map_err(|e| e.to_string())?;
+    if let Some(cache) = guard.as_mut() {
+        for keyword in keywords {
+            cache.insert(normalize_tag(keyword), collection_id.to_string());
+        }
+    }
+    Ok(())
 }
 
 fn parse_match_keywords(raw: Option<String>) -> Option<Vec<String>> {
@@ -120,6 +164,7 @@ pub fn create_smart_collection(
         params![id, name, description, created_at, keywords_json],
     )
     .map_err(|e| e.to_string())?;
+    register_smart_rule_in_cache(&normalized, &id)?;
     Ok(Collection {
         id,
         name: name.to_string(),
@@ -154,6 +199,7 @@ pub fn update_collection_keywords(
     if updated == 0 {
         return Err("コレクションが見つかりません".to_string());
     }
+    invalidate_smart_rules_cache();
     Ok(())
 }
 
@@ -165,6 +211,7 @@ pub fn delete_collection(conn: &Connection, collection_id: &str) -> Result<(), S
     .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM collections WHERE id = ?1", params![collection_id])
         .map_err(|e| e.to_string())?;
+    invalidate_smart_rules_cache();
     Ok(())
 }
 
@@ -198,15 +245,11 @@ pub fn find_smart_collection_for_character(
     conn: &Connection,
     normalized_tag: &str,
 ) -> Result<Option<String>, String> {
-    let rules = list_smart_collection_rules(conn)?;
-    for rule in rules {
-        for keyword in &rule.match_keywords {
-            if normalize_tag(keyword) == normalized_tag {
-                return Ok(Some(rule.id.clone()));
-            }
-        }
-    }
-    Ok(None)
+    ensure_smart_rules_cache(conn)?;
+    let guard = SMART_RULES_CACHE.lock().map_err(|e| e.to_string())?;
+    Ok(guard
+        .as_ref()
+        .and_then(|cache| cache.get(normalized_tag).cloned()))
 }
 
 pub fn ensure_smart_collection_for_character(

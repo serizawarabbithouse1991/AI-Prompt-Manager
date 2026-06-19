@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useFileStore } from "@/features/files/store";
 import {
   FILTER_LABELS,
@@ -15,11 +16,18 @@ export function ViewControls() {
   const layoutMode = useFileStore((s) => s.layoutMode);
   const allTags = useFileStore((s) => s.allTags);
   const viewMode = useFileStore((s) => s.viewMode);
+  const refreshAllTags = useFileStore((s) => s.refreshAllTags);
   const setSortField = useFileStore((s) => s.setSortField);
   const setSortOrder = useFileStore((s) => s.setSortOrder);
   const setFileFilter = useFileStore((s) => s.setFileFilter);
   const setFilterTagId = useFileStore((s) => s.setFilterTagId);
   const setLayoutMode = useFileStore((s) => s.setLayoutMode);
+
+  useEffect(() => {
+    if (fileFilter === "tag") {
+      void refreshAllTags();
+    }
+  }, [fileFilter, refreshAllTags]);
 
   if (viewMode === "settings") return null;
 
@@ -73,7 +81,9 @@ export function ViewControls() {
           onChange={(e) => setFilterTagId(e.target.value || null)}
           className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-caption text-neutral-200"
         >
-          <option value="">タグを選択</option>
+          <option value="">
+            {allTags.length === 0 ? "タグがありません" : "タグを選択"}
+          </option>
           {allTags.map((tag) => (
             <option key={tag.id} value={tag.id}>
               {tag.name}

@@ -184,6 +184,7 @@ type FileStore = {
   setMetadata: (metadata: AIGenerationMetadata | null) => void;
   setTags: (tags: Tag[]) => void;
   setAllTags: (tags: Tag[]) => void;
+  refreshAllTags: () => Promise<void>;
   updateFileThumbnail: (fileId: string, thumbnailPath: string) => void;
   updateFileInList: (file: FileEntry) => void;
   removeFilesFromList: (fileIds: string[]) => void;
@@ -351,6 +352,14 @@ export const useFileStore = create<FileStore>((set, get) => ({
   setMetadata: (metadata) => set({ metadata }),
   setTags: (tags) => set({ tags }),
   setAllTags: (tags) => set({ allTags: tags }),
+  refreshAllTags: async () => {
+    try {
+      const tags = await listTags();
+      set({ allTags: tags });
+    } catch {
+      set({ allTags: [] });
+    }
+  },
 
   getDisplayFiles: () => {
     const { files, sortField, sortOrder, fileFilter, filterTagId } = get();
@@ -729,6 +738,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
   refresh: async () => {
     const { viewMode, searchQuery, currentPath, selectedFileId, metadata, tags, inspectorOpen } =
       get();
+    await get().refreshAllTags();
     if (viewMode === "search" && searchQuery) {
       await get().runSearch(searchQuery);
     } else if (viewMode === "favorites") {

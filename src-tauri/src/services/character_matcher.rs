@@ -4,13 +4,13 @@ use std::path::Path;
 use rusqlite::{params, Connection};
 
 use crate::db::repositories::collections::{
-    add_file_to_collection, ensure_smart_collection_for_character,
+    ensure_smart_collection_for_character, ensure_smart_rules_cache,
     find_smart_collection_for_character, record_character_suggestions,
 };
 use crate::models::collection::{AssignResult, BatchAssignResult, SmartAssignmentDiagnosis};
 use crate::services::danbooru_index::{
-    canonical_name_for_tag, character_cache_count, find_characters_in_prompt, is_cache_ready,
-    require_cache_ready, SKIP_CACHE_NOT_READY,
+    canonical_name_for_tag, character_cache_count, ensure_memory_index, find_characters_in_prompt,
+    is_cache_ready, require_cache_ready, SKIP_CACHE_NOT_READY,
 };
 
 pub const SKIP_NO_PROMPT: &str = "no_prompt";
@@ -108,6 +108,7 @@ pub fn tokenize_prompt(prompt: &str) -> Vec<String> {
 }
 
 pub fn expand_tag_candidates(tags: &[String]) -> Vec<String> {
+    let mut seen: HashSet<String> = tags.iter().cloned().collect();
     let mut candidates = tags.to_vec();
     for window in 2..=4 {
         if tags.len() < window {
@@ -115,7 +116,7 @@ pub fn expand_tag_candidates(tags: &[String]) -> Vec<String> {
         }
         for i in 0..=tags.len() - window {
             let joined = tags[i..i + window].join(" ");
-            if !candidates.contains(&joined) {
+            if seen.insert(joined.clone()) {
                 candidates.push(joined);
             }
         }
@@ -128,22 +129,13 @@ fn assign_count_for_file(
     file_id: &str,
     collection_id: &str,
 ) -> Result<u32, String> {
-    let before = conn
-        .query_row(
-            "SELECT COUNT(*) FROM collection_files WHERE collection_id = ?1 AND file_id = ?2",
+    let changes = conn
+        .execute(
+            "INSERT OR IGNORE INTO collection_files (collection_id, file_id, sort_order) VALUES (?1,?2,0)",
             params![collection_id, file_id],
-            |row| row.get::<_, i64>(0),
         )
-        .unwrap_or(0);
-    add_file_to_collection(conn, collection_id, file_id)?;
-    let after = conn
-        .query_row(
-            "SELECT COUNT(*) FROM collection_files WHERE collection_id = ?1 AND file_id = ?2",
-            params![collection_id, file_id],
-            |row| row.get::<_, i64>(0),
-        )
-        .unwrap_or(0);
-    Ok(if after > before { 1 } else { 0 })
+        .map_err(|e| e.to_string())?;
+    Ok(if changes > 0 { 1 } else { 0 })
 }
 
 fn suggest_unassigned_character_tags(
@@ -226,6 +218,8 @@ pub fn diagnose_smart_assignment(
     }
 
     let tags = tokenize_prompt(&prompt);
+    ensure_memory_index(conn)?;
+    ensure_smart_rules_cache(conn)?;
     let char_tags = find_characters_in_prompt(conn, &prompt, &tags)?;
     let skip_reason = if char_tags.is_empty() {
         Some(SKIP_NO_CHARACTER_TAGS.to_string())
@@ -277,6 +271,8 @@ pub fn assign_smart_collections_for_file(
     };
 
     let tags = tokenize_prompt(&prompt);
+    ensure_memory_index(conn)?;
+    ensure_smart_rules_cache(conn)?;
     let char_tags = find_characters_in_prompt(conn, &prompt, &tags)?;
     if char_tags.is_empty() {
         return Ok(AssignResult {
@@ -321,6 +317,9 @@ pub fn batch_assign_smart_collections(
             ..BatchAssignResult::default()
         });
     }
+
+    ensure_memory_index(conn)?;
+    ensure_smart_rules_cache(conn)?;
 
     let total_files: u32 = conn
         .query_row(

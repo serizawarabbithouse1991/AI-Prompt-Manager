@@ -70,6 +70,7 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
   const setScanProgress = useFileStore((s) => s.setScanProgress);
   const setBatchProgress = useFileStore((s) => s.setBatchProgress);
   const setImportProgress = useFileStore((s) => s.setImportProgress);
+  const refreshAllTags = useFileStore((s) => s.refreshAllTags);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [libraryScanning, setLibraryScanning] = useState(false);
   const [autoPhotoScan, setAutoPhotoScan] = useState(loadAutoPhotoScanEnabled);
@@ -149,6 +150,7 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
     setBatchTagRunning(true);
     try {
       const result = await batchApplyPromptTags(promptTagSettings?.mode);
+      await refreshAllTags();
       const message = formatBatchTagApplyResult(result);
       setLastResult(message);
       toast(message, result.skipReason ? "error" : "success");
