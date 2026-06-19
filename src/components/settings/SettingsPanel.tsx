@@ -147,6 +147,13 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
   }
 
   async function handleBatchApplyPromptTags() {
+    const mode = promptTagSettings?.mode ?? "all";
+    if (mode === "character" && danbooruStatus && !danbooruStatus.cacheReady) {
+      const message = formatSkipReason("cache_not_ready");
+      setLastResult(message);
+      toast(message, "error");
+      return;
+    }
     setBatchTagRunning(true);
     try {
       const result = await batchApplyPromptTags(promptTagSettings?.mode);

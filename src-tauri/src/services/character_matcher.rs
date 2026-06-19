@@ -95,7 +95,7 @@ pub fn tokenize_prompt(prompt: &str) -> Vec<String> {
         for part in segment.split([',', '\n', '|']) {
             let cleaned = strip_weight_syntax(part);
             let normalized = normalize_tag(&cleaned);
-            if normalized.len() < 2 {
+            if normalized.chars().count() < 2 {
                 continue;
             }
             if seen.insert(normalized.clone()) {

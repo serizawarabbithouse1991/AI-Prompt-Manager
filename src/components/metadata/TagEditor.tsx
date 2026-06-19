@@ -24,17 +24,26 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
   const [applying, setApplying] = useState(false);
   const setTags = useFileStore((s) => s.setTags);
   const setAllTags = useFileStore((s) => s.setAllTags);
-  const refreshAllTags = useFileStore((s) => s.setAllTags);
+  const updateFileInList = useFileStore((s) => s.updateFileInList);
+  const selectedFile = useFileStore((s) => s.selectedFile);
+
+  function syncFileTagIds(fileTags: Tag[]) {
+    if (!selectedFile || selectedFile.id !== fileId) return;
+    updateFileInList({ ...selectedFile, tagIds: fileTags.map((t) => t.id) });
+  }
 
   async function handleAddExisting(tagId: string) {
     await addTagToFile(fileId, tagId, absolutePath);
     const updated = await getFileTags(fileId);
     setTags(updated);
+    syncFileTagIds(updated);
   }
 
   async function handleRemove(tagId: string) {
     await removeTagFromFile(fileId, tagId);
-    setTags(tags.filter((t) => t.id !== tagId));
+    const updated = tags.filter((t) => t.id !== tagId);
+    setTags(updated);
+    syncFileTagIds(updated);
   }
 
   async function handleCreate() {
@@ -48,8 +57,8 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
       listTags(),
     ]);
     setTags(fileTags);
-    refreshAllTags(updatedAll);
     setAllTags(updatedAll);
+    syncFileTagIds(fileTags);
   }
 
   async function handleApplyFromPrompt() {
@@ -66,10 +75,14 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
       ]);
       setTags(fileTags);
       setAllTags(updatedAll);
+      syncFileTagIds(fileTags);
       if (result.tagsAdded > 0) {
         toast(`${result.tagsAdded} タグを付与しました`, "success");
       } else {
-        toast("追加するタグはありませんでした", "info");
+        toast(
+          "追加するタグはありませんでした。プロンプト未保存の可能性があります。「再抽出」後に再実行してください",
+          "info",
+        );
       }
     } catch (e) {
       toast(String(e), "error");

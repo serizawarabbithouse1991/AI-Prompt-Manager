@@ -50,16 +50,17 @@ pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGeneratio
     if let Some(comment) = chunk_get(&raw_chunks, "Comment") {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(comment) {
             meta.source_app = Some("NovelAI".to_string());
-            meta.positive_prompt = json
+            let base_positive = json
                 .get("prompt")
                 .or_else(|| json.get("Description"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            meta.negative_prompt = json
+                .and_then(|v| v.as_str());
+            meta.positive_prompt = merge_novelai_prompt(base_positive, &json, "v4_prompt");
+            let base_negative = json
                 .get("uc")
                 .or_else(|| json.get("negative_prompt"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .and_then(|v| v.as_str());
+            meta.negative_prompt =
+                merge_novelai_prompt(base_negative, &json, "v4_negative_prompt");
             meta.seed = json.get("seed").map(|v| v.to_string());
             meta.steps = json.get("steps").and_then(|v| v.as_i64());
             meta.cfg_scale = json.get("scale").and_then(|v| v.as_f64());
@@ -91,16 +92,17 @@ pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGeneratio
     if let Some(description) = chunk_get(&raw_chunks, "Description") {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(description) {
             meta.source_app = Some("NovelAI".to_string());
-            meta.positive_prompt = json
+            let base_positive = json
                 .get("prompt")
                 .or_else(|| json.get("Description"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            meta.negative_prompt = json
+                .and_then(|v| v.as_str());
+            meta.positive_prompt = merge_novelai_prompt(base_positive, &json, "v4_prompt");
+            let base_negative = json
                 .get("uc")
                 .or_else(|| json.get("negative_prompt"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .and_then(|v| v.as_str());
+            meta.negative_prompt =
+                merge_novelai_prompt(base_negative, &json, "v4_negative_prompt");
             return Ok(Some(meta));
         }
         if description.contains("Negative prompt:") || description.contains("Steps:") {
@@ -147,6 +149,52 @@ pub fn detect_novelai_from_file(path: &str) -> Result<bool, String> {
     Ok(extract_from_file(path, &file_id)?
         .map(|m| is_novelai_metadata(&m))
         .unwrap_or(false))
+}
+
+/// NovelAI v4/v4.5 のプロンプトを統合する。
+/// 最上位 `prompt`/`uc` に加え、`v4_prompt`/`v4_negative_prompt` の
+/// `caption.base_caption` と `caption.char_captions[].char_caption` を連結する。
+/// 重複は除外し、`, ` 区切りで結合する。該当が無ければ None。
+fn merge_novelai_prompt(
+    base: Option<&str>,
+    json: &serde_json::Value,
+    v4_key: &str,
+) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    let mut push_part = |raw: &str, parts: &mut Vec<String>| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        if seen.insert(trimmed.to_string()) {
+            parts.push(trimmed.to_string());
+        }
+    };
+
+    if let Some(b) = base {
+        push_part(b, &mut parts);
+    }
+
+    if let Some(caption) = json.get(v4_key).and_then(|v| v.get("caption")) {
+        if let Some(base_caption) = caption.get("base_caption").and_then(|v| v.as_str()) {
+            push_part(base_caption, &mut parts);
+        }
+        if let Some(arr) = caption.get("char_captions").and_then(|v| v.as_array()) {
+            for entry in arr {
+                if let Some(cc) = entry.get("char_caption").and_then(|v| v.as_str()) {
+                    push_part(cc, &mut parts);
+                }
+            }
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(", "))
+    }
 }
 
 fn truncate_prompt(text: &str) -> String {
@@ -502,5 +550,71 @@ mod tests {
         assert_eq!(meta.source_app.as_deref(), Some("Stable Diffusion WebUI"));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extract_novelai_v4_merges_char_captions_when_base_prompt_empty() {
+        let dir = std::env::temp_dir().join(format!("nai-v4-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("nai_v4.png");
+        write_test_png(
+            &path,
+            &[(
+                "Comment",
+                r#"{"prompt":"","uc":"","seed":1,"v4_prompt":{"caption":{"base_caption":"2girls, outdoors","char_captions":[{"char_caption":"hatsune miku"},{"char_caption":"kagamine rin"}]}}}"#,
+            )],
+        );
+
+        let meta = extract_from_file(&path.to_string_lossy(), "f1")
+            .expect("extract")
+            .expect("metadata");
+        assert_eq!(meta.source_app.as_deref(), Some("NovelAI"));
+        assert_eq!(
+            meta.positive_prompt.as_deref(),
+            Some("2girls, outdoors, hatsune miku, kagamine rin")
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extract_novelai_v4_merges_top_level_and_negative() {
+        let dir = std::env::temp_dir().join(format!("nai-v4neg-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("nai_v4neg.png");
+        write_test_png(
+            &path,
+            &[(
+                "Comment",
+                r#"{"prompt":"masterpiece","uc":"lowres","seed":1,"v4_prompt":{"caption":{"base_caption":"1girl","char_captions":[{"char_caption":"hatsune miku"}]}},"v4_negative_prompt":{"caption":{"base_caption":"bad hands","char_captions":[{"char_caption":"extra arms"}]}}}"#,
+            )],
+        );
+
+        let meta = extract_from_file(&path.to_string_lossy(), "f1")
+            .expect("extract")
+            .expect("metadata");
+        assert_eq!(
+            meta.positive_prompt.as_deref(),
+            Some("masterpiece, 1girl, hatsune miku")
+        );
+        assert_eq!(
+            meta.negative_prompt.as_deref(),
+            Some("lowres, bad hands, extra arms")
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merge_novelai_prompt_dedupes_and_skips_empty() {
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{"v4_prompt":{"caption":{"base_caption":"1girl","char_captions":[{"char_caption":"1girl"},{"char_caption":"  "},{"char_caption":"hatsune miku"}]}}}"#,
+        )
+        .expect("parse json");
+        let merged = merge_novelai_prompt(Some("1girl"), &json, "v4_prompt");
+        assert_eq!(merged.as_deref(), Some("1girl, hatsune miku"));
+
+        let none_json = serde_json::json!({});
+        assert_eq!(merge_novelai_prompt(Some("  "), &none_json, "v4_prompt"), None);
     }
 }
