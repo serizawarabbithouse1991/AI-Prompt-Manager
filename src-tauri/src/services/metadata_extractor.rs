@@ -117,6 +117,18 @@ pub fn extract_from_file(path: &str, file_id: &str) -> Result<Option<AIGeneratio
         return Ok(Some(meta));
     }
 
+    if let Some(description) = chunk_get(&raw_chunks, "ImageDescription")
+        .or_else(|| chunk_get(&raw_chunks, "Description"))
+        .or_else(|| chunk_get(&raw_chunks, "parameters"))
+        .or_else(|| chunk_get(&raw_chunks, "UserComment"))
+    {
+        if is_midjourney_text(description) {
+            parse_midjourney(&mut meta, description);
+            meta.source_app = Some("Midjourney".to_string());
+            return Ok(Some(meta));
+        }
+    }
+
     meta.source_app = Some("unknown".to_string());
     Ok(Some(meta))
 }
@@ -142,6 +154,39 @@ fn truncate_prompt(text: &str) -> String {
         format!("{}…", &text[..500])
     } else {
         text.to_string()
+    }
+}
+
+fn is_midjourney_text(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    const FLAGS: [&str; 9] = [
+        "--ar ", "--v ", "--niji", "--stylize", "--style ", "--chaos", "--q ", "--s ", "job id",
+    ];
+    FLAGS.iter().any(|flag| lower.contains(flag))
+}
+
+fn parse_midjourney(meta: &mut AIGenerationMetadata, text: &str) {
+    meta.positive_prompt = Some(truncate_prompt(text.trim()));
+
+    if let Some(re) = Regex::new(r"--niji\s+(\d+(?:\.\d+)?)").ok() {
+        if let Some(caps) = re.captures(text) {
+            meta.model = caps.get(1).map(|m| format!("niji {}", m.as_str()));
+        }
+    }
+    if meta.model.is_none() {
+        if text.to_lowercase().contains("--niji") {
+            meta.model = Some("niji".to_string());
+        } else if let Some(re) = Regex::new(r"--v\s+(\d+(?:\.\d+)?)").ok() {
+            if let Some(caps) = re.captures(text) {
+                meta.model = caps.get(1).map(|m| format!("v{}", m.as_str()));
+            }
+        }
+    }
+
+    if let Some(re) = Regex::new(r"(?i)Job ID:\s*([0-9a-f\-]+)").ok() {
+        if let Some(caps) = re.captures(text) {
+            meta.seed = caps.get(1).map(|m| m.as_str().to_string());
+        }
     }
 }
 
@@ -376,6 +421,85 @@ mod tests {
         );
 
         assert!(!detect_novelai_from_file(&path.to_string_lossy()).expect("detect"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_midjourney_text_detects_flags() {
+        assert!(is_midjourney_text("a cute cat --ar 16:9 --v 6.1"));
+        assert!(is_midjourney_text("portrait --niji 6 --stylize 250"));
+        assert!(is_midjourney_text("scene\nJob ID: 1234abcd-5678"));
+    }
+
+    #[test]
+    fn is_midjourney_text_rejects_plain_and_a1111() {
+        assert!(!is_midjourney_text("1girl, masterpiece, best quality"));
+        assert!(!is_midjourney_text(
+            "1girl\nNegative prompt: bad\nSteps: 20, Sampler: Euler a"
+        ));
+    }
+
+    #[test]
+    fn extract_from_file_detects_midjourney_v() {
+        let dir = std::env::temp_dir().join(format!("mj-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("mj.png");
+        write_test_png(&path, &[("Description", "a majestic lion --ar 16:9 --v 6.1")]);
+
+        let meta = extract_from_file(&path.to_string_lossy(), "f1")
+            .expect("extract")
+            .expect("metadata");
+        assert_eq!(meta.source_app.as_deref(), Some("Midjourney"));
+        assert_eq!(
+            meta.positive_prompt.as_deref(),
+            Some("a majestic lion --ar 16:9 --v 6.1")
+        );
+        assert_eq!(meta.model.as_deref(), Some("v6.1"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extract_from_file_detects_midjourney_niji_and_job_id() {
+        let dir = std::env::temp_dir().join(format!("mj-niji-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("mj_niji.png");
+        write_test_png(
+            &path,
+            &[(
+                "Description",
+                "anime girl --niji 6 --ar 2:3\nJob ID: abc12345-def6-7890",
+            )],
+        );
+
+        let meta = extract_from_file(&path.to_string_lossy(), "f1")
+            .expect("extract")
+            .expect("metadata");
+        assert_eq!(meta.source_app.as_deref(), Some("Midjourney"));
+        assert_eq!(meta.model.as_deref(), Some("niji 6"));
+        assert_eq!(meta.seed.as_deref(), Some("abc12345-def6-7890"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extract_from_file_does_not_misclassify_a1111_as_midjourney() {
+        let dir = std::env::temp_dir().join(format!("mj-neg-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("a1111.png");
+        write_test_png(
+            &path,
+            &[(
+                "parameters",
+                "1girl\nNegative prompt: bad\nSteps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1",
+            )],
+        );
+
+        let meta = extract_from_file(&path.to_string_lossy(), "f1")
+            .expect("extract")
+            .expect("metadata");
+        assert_eq!(meta.source_app.as_deref(), Some("Stable Diffusion WebUI"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
