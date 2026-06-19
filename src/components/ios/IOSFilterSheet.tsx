@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useFileStore } from "@/features/files/store";
+import { SEARCH_SOURCE_APPS } from "@/features/files/searchFilters";
 import {
   FILTER_LABELS,
   LAYOUT_LABELS,
@@ -21,6 +22,8 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
   const fileFilter = useFileStore((s) => s.fileFilter);
   const filterTagId = useFileStore((s) => s.filterTagId);
   const searchTagId = useFileStore((s) => s.searchTagId);
+  const searchSourceApp = useFileStore((s) => s.searchSourceApp);
+  const searchModel = useFileStore((s) => s.searchModel);
   const viewMode = useFileStore((s) => s.viewMode);
   const layoutMode = useFileStore((s) => s.layoutMode);
   const allTags = useFileStore((s) => s.allTags);
@@ -29,14 +32,17 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
   const setFileFilter = useFileStore((s) => s.setFileFilter);
   const setFilterTagId = useFileStore((s) => s.setFilterTagId);
   const setSearchTagId = useFileStore((s) => s.setSearchTagId);
+  const setSearchSourceApp = useFileStore((s) => s.setSearchSourceApp);
+  const setSearchModel = useFileStore((s) => s.setSearchModel);
   const refreshAllTags = useFileStore((s) => s.refreshAllTags);
   const setLayoutMode = useFileStore((s) => s.setLayoutMode);
 
   useEffect(() => {
-    if (open && viewMode === "search") {
+    if (!open) return;
+    if (fileFilter === "tag" || viewMode === "search" || searchTagId) {
       void refreshAllTags();
     }
-  }, [open, viewMode, refreshAllTags]);
+  }, [open, fileFilter, viewMode, searchTagId, refreshAllTags]);
 
   return (
     <IOSSheet open={open} onClose={onClose} title="表示オプション" tall>
@@ -97,26 +103,61 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
         </section>
 
         {viewMode === "search" && (
-          <section>
-            <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">
-              検索タグ
-            </h3>
-            <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
-              <IOSListRow
-                label="すべて"
-                onPress={() => setSearchTagId(null)}
-                trailing={!searchTagId ? <span className="text-blue-400">✓</span> : null}
+          <>
+            <section>
+              <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">
+                生成アプリ
+              </h3>
+              <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
+                {SEARCH_SOURCE_APPS.map((opt) => (
+                  <IOSListRow
+                    key={opt.value || "all"}
+                    label={opt.label}
+                    onPress={() => setSearchSourceApp(opt.value)}
+                    trailing={
+                      searchSourceApp === opt.value ? (
+                        <span className="text-blue-400">✓</span>
+                      ) : null
+                    }
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">
+                モデル
+              </h3>
+              <input
+                type="search"
+                value={searchModel}
+                onChange={(e) => setSearchModel(e.target.value)}
+                placeholder="モデル名で絞り込み"
+                className="w-full rounded-[var(--ios-radius-md)] border border-neutral-700 bg-[var(--ios-bg-grouped)] px-4 py-3 text-base text-neutral-100"
               />
-              {allTags.map((tag) => (
+            </section>
+
+            <section>
+              <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">
+                検索タグ
+              </h3>
+              <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
                 <IOSListRow
-                  key={tag.id}
-                  label={tag.name}
-                  onPress={() => setSearchTagId(tag.id)}
-                  trailing={searchTagId === tag.id ? <span className="text-blue-400">✓</span> : null}
+                  label="すべて"
+                  onPress={() => setSearchTagId(null)}
+                  trailing={!searchTagId ? <span className="text-blue-400">✓</span> : null}
                 />
-              ))}
-            </div>
-          </section>
+                {allTags.map((tag) => (
+                  <IOSListRow
+                    key={tag.id}
+                    label={tag.name}
+                    onPress={() => setSearchTagId(tag.id)}
+                    trailing={searchTagId === tag.id ? <span className="text-blue-400">✓</span> : null}
+                  />
+                ))}
+              </div>
+            </section>
+          </>
         )}
 
         <section>

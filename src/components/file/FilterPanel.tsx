@@ -1,12 +1,6 @@
 import { useEffect } from "react";
 import { useFileStore } from "@/features/files/store";
-
-const SOURCE_APPS = [
-  { value: "", label: "すべて" },
-  { value: "novelai", label: "NovelAI" },
-  { value: "automatic1111", label: "A1111" },
-  { value: "comfyui", label: "ComfyUI" },
-];
+import { SEARCH_SOURCE_APPS } from "@/features/files/searchFilters";
 
 export function FilterPanel() {
   const searchSourceApp = useFileStore((s) => s.searchSourceApp);
@@ -38,7 +32,7 @@ export function FilterPanel() {
           onChange={(e) => setSearchSourceApp(e.target.value)}
           className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200"
         >
-          {SOURCE_APPS.map((opt) => (
+          {SEARCH_SOURCE_APPS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
