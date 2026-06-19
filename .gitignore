@@ -24,7 +24,11 @@ dist-ssr
 *.sw?
 
 # Build / release artifacts
-/release/
+/release/**
+!release/**/
+!release/**/*-setup.exe
+*.exe
+!release/**/*-setup.exe
 *.dmg
 *.app/
 
