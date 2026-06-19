@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFileStore } from "@/features/files/store";
 import { SEARCH_SOURCE_APPS } from "@/features/files/searchFilters";
 import {
@@ -10,11 +10,32 @@ import type { FileFilter, LayoutMode, SortField } from "@/features/files/types";
 import { IOSSheet } from "@/components/ios/IOSSheet";
 import { IOSListRow } from "@/components/ios/IOSGroupedList";
 import { GridSizeControl } from "@/components/file/GridSizeControl";
+import { filterTagsByQuery } from "@/lib/tagPicker";
 
 type IOSFilterSheetProps = {
   open: boolean;
   onClose: () => void;
 };
+
+function TagSearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <input
+      type="search"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      className="mb-2 w-full rounded-[var(--ios-radius-md)] border border-neutral-700 bg-[var(--ios-bg-grouped)] px-3 py-2 text-sm text-neutral-100"
+    />
+  );
+}
 
 export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
   const sortField = useFileStore((s) => s.sortField);
@@ -24,6 +45,7 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
   const searchTagId = useFileStore((s) => s.searchTagId);
   const searchSourceApp = useFileStore((s) => s.searchSourceApp);
   const searchModel = useFileStore((s) => s.searchModel);
+  const searchQuery = useFileStore((s) => s.searchQuery);
   const viewMode = useFileStore((s) => s.viewMode);
   const layoutMode = useFileStore((s) => s.layoutMode);
   const allTags = useFileStore((s) => s.allTags);
@@ -34,18 +56,34 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
   const setSearchTagId = useFileStore((s) => s.setSearchTagId);
   const setSearchSourceApp = useFileStore((s) => s.setSearchSourceApp);
   const setSearchModel = useFileStore((s) => s.setSearchModel);
+  const runSearch = useFileStore((s) => s.runSearch);
   const refreshAllTags = useFileStore((s) => s.refreshAllTags);
   const setLayoutMode = useFileStore((s) => s.setLayoutMode);
+  const [browseTagQuery, setBrowseTagQuery] = useState("");
+  const [searchTagQuery, setSearchTagQuery] = useState("");
+
+  const filteredBrowseTags = filterTagsByQuery(allTags, browseTagQuery);
+  const filteredSearchTags = filterTagsByQuery(allTags, searchTagQuery);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setBrowseTagQuery("");
+      setSearchTagQuery("");
+      return;
+    }
     if (fileFilter === "tag" || viewMode === "search" || searchTagId) {
       void refreshAllTags();
     }
   }, [open, fileFilter, viewMode, searchTagId, refreshAllTags]);
 
+  function handleClose() {
+    setBrowseTagQuery("");
+    setSearchTagQuery("");
+    onClose();
+  }
+
   return (
-    <IOSSheet open={open} onClose={onClose} title="表示オプション" tall>
+    <IOSSheet open={open} onClose={handleClose} title="表示オプション" tall>
       <div className="space-y-6 p-4">
         <section>
           <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">並び替え</h3>
@@ -88,16 +126,31 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
               />
             ))}
           </div>
-          {fileFilter === "tag" && allTags.length > 0 && (
-            <div className="mt-2 overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
-              {allTags.map((tag) => (
-                <IOSListRow
-                  key={tag.id}
-                  label={tag.name}
-                  onPress={() => setFilterTagId(tag.id)}
-                  trailing={filterTagId === tag.id ? <span className="text-blue-400">✓</span> : null}
-                />
-              ))}
+          {fileFilter === "tag" && (
+            <div className="mt-2">
+              <TagSearchInput
+                value={browseTagQuery}
+                onChange={setBrowseTagQuery}
+                placeholder="タグを検索…"
+              />
+              {allTags.length === 0 ? (
+                <p className="px-1 text-sm text-neutral-500">タグがありません</p>
+              ) : (
+                <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
+                  {filteredBrowseTags.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-neutral-500">一致するタグがありません</p>
+                  ) : (
+                    filteredBrowseTags.map((tag) => (
+                      <IOSListRow
+                        key={tag.id}
+                        label={tag.name}
+                        onPress={() => setFilterTagId(tag.id)}
+                        trailing={filterTagId === tag.id ? <span className="text-blue-400">✓</span> : null}
+                      />
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -141,21 +194,40 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
               <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">
                 検索タグ
               </h3>
-              <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
-                <IOSListRow
-                  label="すべて"
-                  onPress={() => setSearchTagId(null)}
-                  trailing={!searchTagId ? <span className="text-blue-400">✓</span> : null}
-                />
-                {allTags.map((tag) => (
+              <TagSearchInput
+                value={searchTagQuery}
+                onChange={setSearchTagQuery}
+                placeholder="タグを検索…"
+              />
+              {allTags.length === 0 ? (
+                <p className="px-1 text-sm text-neutral-500">タグがありません</p>
+              ) : (
+                <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
                   <IOSListRow
-                    key={tag.id}
-                    label={tag.name}
-                    onPress={() => setSearchTagId(tag.id)}
-                    trailing={searchTagId === tag.id ? <span className="text-blue-400">✓</span> : null}
+                    label="すべて"
+                    onPress={() => {
+                      setSearchTagId(null);
+                      void runSearch(searchQuery);
+                    }}
+                    trailing={!searchTagId ? <span className="text-blue-400">✓</span> : null}
                   />
-                ))}
-              </div>
+                  {filteredSearchTags.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-neutral-500">一致するタグがありません</p>
+                  ) : (
+                    filteredSearchTags.map((tag) => (
+                      <IOSListRow
+                        key={tag.id}
+                        label={tag.name}
+                        onPress={() => {
+                          setSearchTagId(tag.id);
+                          void runSearch(searchQuery);
+                        }}
+                        trailing={searchTagId === tag.id ? <span className="text-blue-400">✓</span> : null}
+                      />
+                    ))
+                  )}
+                </div>
+              )}
             </section>
           </>
         )}

@@ -7,6 +7,7 @@ import {
 } from "@/features/files/viewUtils";
 import type { FileFilter, LayoutMode, SortField, SortOrder } from "@/features/files/types";
 import { GridSizeControl } from "@/components/file/GridSizeControl";
+import { TagPicker } from "@/components/ui/TagPicker";
 
 export function ViewControls() {
   const sortField = useFileStore((s) => s.sortField);
@@ -76,20 +77,13 @@ export function ViewControls() {
       </label>
 
       {fileFilter === "tag" && (
-        <select
-          value={filterTagId ?? ""}
-          onChange={(e) => setFilterTagId(e.target.value || null)}
-          className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-caption text-neutral-200"
-        >
-          <option value="">
-            {allTags.length === 0 ? "タグがありません" : "タグを選択"}
-          </option>
-          {allTags.map((tag) => (
-            <option key={tag.id} value={tag.id}>
-              {tag.name}
-            </option>
-          ))}
-        </select>
+        <TagPicker
+          tags={allTags}
+          value={filterTagId}
+          onChange={setFilterTagId}
+          placeholder="タグを検索…"
+          emptyLabel="タグを選択"
+        />
       )}
 
       {layoutMode === "grid" && <GridSizeControl variant="desktop" />}

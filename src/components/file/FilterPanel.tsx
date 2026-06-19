@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useFileStore } from "@/features/files/store";
 import { SEARCH_SOURCE_APPS } from "@/features/files/searchFilters";
+import { TagPicker } from "@/components/ui/TagPicker";
 
 export function FilterPanel() {
   const searchSourceApp = useFileStore((s) => s.searchSourceApp);
@@ -10,6 +11,8 @@ export function FilterPanel() {
   const setSearchSourceApp = useFileStore((s) => s.setSearchSourceApp);
   const setSearchModel = useFileStore((s) => s.setSearchModel);
   const setSearchTagId = useFileStore((s) => s.setSearchTagId);
+  const runSearch = useFileStore((s) => s.runSearch);
+  const searchQuery = useFileStore((s) => s.searchQuery);
   const refreshAllTags = useFileStore((s) => s.refreshAllTags);
   const searchScope = useFileStore((s) => s.searchScope);
   const viewMode = useFileStore((s) => s.viewMode);
@@ -51,18 +54,16 @@ export function FilterPanel() {
       </label>
       <label className="flex items-center gap-1 text-caption text-neutral-500">
         タグ
-        <select
-          value={searchTagId ?? ""}
-          onChange={(e) => setSearchTagId(e.target.value || null)}
-          className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200"
-        >
-          <option value="">{allTags.length === 0 ? "タグがありません" : "すべて"}</option>
-          {allTags.map((tag) => (
-            <option key={tag.id} value={tag.id}>
-              {tag.name}
-            </option>
-          ))}
-        </select>
+        <TagPicker
+          tags={allTags}
+          value={searchTagId}
+          onChange={(tagId) => {
+            setSearchTagId(tagId);
+            void runSearch(searchQuery);
+          }}
+          placeholder="タグを検索…"
+          emptyLabel="すべて"
+        />
       </label>
     </div>
   );
