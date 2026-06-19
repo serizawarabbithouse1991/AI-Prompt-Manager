@@ -14,6 +14,7 @@ export function IOSLibraryView({ title }: IOSLibraryViewProps) {
   const refresh = useFileStore((s) => s.refresh);
   const runSearch = useFileStore((s) => s.runSearch);
   const viewMode = useFileStore((s) => s.viewMode);
+  const searchTagId = useFileStore((s) => s.searchTagId);
   const setViewMode = useFileStore((s) => s.setViewMode);
   const [filterOpen, setFilterOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -31,7 +32,7 @@ export function IOSLibraryView({ title }: IOSLibraryViewProps) {
 
   function handleSearchSubmit() {
     const value = searchText.trim();
-    if (value) void runSearch(value);
+    if (value || searchTagId) void runSearch(value);
     else if (viewMode === "search") void setViewMode("ai-library");
   }
 

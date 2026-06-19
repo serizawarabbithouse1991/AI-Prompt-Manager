@@ -49,6 +49,7 @@ type ViewPrefs = {
   filterTagId: string | null;
   layoutMode: LayoutMode;
   searchScope: SearchScope;
+  searchTagId: string | null;
   gridColumns: number;
 };
 
@@ -137,6 +138,7 @@ type FileStore = {
   searchScope: SearchScope;
   searchSourceApp: string;
   searchModel: string;
+  searchTagId: string | null;
   selectedCollectionId: string | null;
   collections: Collection[];
   searchHasMore: boolean;
@@ -153,6 +155,7 @@ type FileStore = {
   setSearchScope: (scope: SearchScope) => void;
   setSearchSourceApp: (value: string) => void;
   setSearchModel: (value: string) => void;
+  setSearchTagId: (tagId: string | null) => void;
   setSelectedCollectionId: (id: string | null) => void;
   setCollections: (collections: Collection[]) => void;
   setLightboxFileId: (fileId: string | null) => void;
@@ -203,6 +206,7 @@ function getViewPrefsFromState(s: FileStore): ViewPrefs {
     filterTagId: s.filterTagId,
     layoutMode: s.layoutMode,
     searchScope: s.searchScope,
+    searchTagId: s.searchTagId,
     gridColumns: s.gridColumns,
   };
 }
@@ -249,6 +253,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
   lightboxFileId: null,
   searchSourceApp: "",
   searchModel: "",
+  searchTagId: initialViewPrefs.searchTagId ?? null,
   selectedCollectionId: null,
   collections: [],
   searchHasMore: false,
@@ -302,16 +307,30 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
   setSearchSourceApp: (value) => {
     set({ searchSourceApp: value });
-    const { viewMode, searchQuery } = get();
-    if (viewMode === "search" && searchQuery) {
+    const { viewMode, searchQuery, searchTagId } = get();
+    if (viewMode === "search" && (searchQuery || searchTagId)) {
       void get().runSearch(searchQuery);
     }
   },
   setSearchModel: (value) => {
     set({ searchModel: value });
-    const { viewMode, searchQuery } = get();
-    if (viewMode === "search" && searchQuery) {
+    const { viewMode, searchQuery, searchTagId } = get();
+    if (viewMode === "search" && (searchQuery || searchTagId)) {
       void get().runSearch(searchQuery);
+    }
+  },
+  setSearchTagId: (tagId) => {
+    set({ searchTagId: tagId });
+    saveViewPrefs(getViewPrefsFromState(get()));
+    if (tagId) {
+      void get().runSearch(get().searchQuery);
+      return;
+    }
+    const { viewMode, searchQuery } = get();
+    if (viewMode === "search" && searchQuery.trim()) {
+      void get().runSearch(searchQuery);
+    } else if (viewMode === "search") {
+      void get().setViewMode("browse");
     }
   },
   setSelectedCollectionId: (id) => set({ selectedCollectionId: id }),
@@ -661,11 +680,27 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   runSearch: async (query: string) => {
-    const { searchScope, viewMode, currentPath, files, searchSourceApp, searchModel } = get();
+    const {
+      searchScope,
+      viewMode,
+      currentPath,
+      files,
+      searchSourceApp,
+      searchModel,
+      searchTagId,
+      allTags,
+    } = get();
+    const trimmed = query.trim();
+    if (searchScope === "global" && !trimmed && !searchTagId) {
+      if (viewMode === "search") {
+        await get().setViewMode("browse");
+      }
+      return;
+    }
     set({
       loading: true,
       error: null,
-      searchQuery: query,
+      searchQuery: trimmed,
       viewMode: "search",
       selectedFileIds: [],
       selectionMode: false,
@@ -684,7 +719,10 @@ export const useFileStore = create<FileStore>((set, get) => ({
         } else if (viewMode === "collections" && get().selectedCollectionId) {
           baseFiles = await listCollectionFiles(get().selectedCollectionId!);
         }
-        const filtered = filterFilesByQuery(baseFiles, query, true);
+        let filtered = filterFilesByQuery(baseFiles, trimmed, true, allTags);
+        if (searchTagId) {
+          filtered = filtered.filter((file) => file.tagIds?.includes(searchTagId) ?? false);
+        }
         set({
           files: filtered,
           loading: false,
@@ -694,9 +732,10 @@ export const useFileStore = create<FileStore>((set, get) => ({
         return;
       }
 
-      const results = await searchFiles(query, {
+      const results = await searchFiles(trimmed, {
         sourceApp: searchSourceApp || null,
         model: searchModel || null,
+        tagId: searchTagId || null,
         limit: 50,
         offset: 0,
       });
@@ -713,15 +752,25 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   loadMoreSearch: async () => {
-    const { searchQuery, searchSourceApp, searchModel, files, searchHasMore, searchLoadingMore } =
-      get();
-    if (!searchHasMore || searchLoadingMore || !searchQuery) return;
+    const {
+      searchQuery,
+      searchSourceApp,
+      searchModel,
+      searchTagId,
+      files,
+      searchHasMore,
+      searchLoadingMore,
+      searchScope,
+    } = get();
+    if (searchScope !== "global" || !searchHasMore || searchLoadingMore) return;
+    if (!searchQuery && !searchTagId) return;
 
     set({ searchLoadingMore: true });
     try {
       const results = await searchFiles(searchQuery, {
         sourceApp: searchSourceApp || null,
         model: searchModel || null,
+        tagId: searchTagId || null,
         limit: 50,
         offset: files.length,
       });
@@ -736,10 +785,10 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   refresh: async () => {
-    const { viewMode, searchQuery, currentPath, selectedFileId, metadata, tags, inspectorOpen } =
+    const { viewMode, searchQuery, searchTagId, currentPath, selectedFileId, metadata, tags, inspectorOpen } =
       get();
     await get().refreshAllTags();
-    if (viewMode === "search" && searchQuery) {
+    if (viewMode === "search" && (searchQuery || searchTagId)) {
       await get().runSearch(searchQuery);
     } else if (viewMode === "favorites") {
       const files = await listFavorites();

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useFileStore } from "@/features/files/store";
 import {
   FILTER_LABELS,
@@ -19,13 +20,23 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
   const sortOrder = useFileStore((s) => s.sortOrder);
   const fileFilter = useFileStore((s) => s.fileFilter);
   const filterTagId = useFileStore((s) => s.filterTagId);
+  const searchTagId = useFileStore((s) => s.searchTagId);
+  const viewMode = useFileStore((s) => s.viewMode);
   const layoutMode = useFileStore((s) => s.layoutMode);
   const allTags = useFileStore((s) => s.allTags);
   const setSortField = useFileStore((s) => s.setSortField);
   const setSortOrder = useFileStore((s) => s.setSortOrder);
   const setFileFilter = useFileStore((s) => s.setFileFilter);
   const setFilterTagId = useFileStore((s) => s.setFilterTagId);
+  const setSearchTagId = useFileStore((s) => s.setSearchTagId);
+  const refreshAllTags = useFileStore((s) => s.refreshAllTags);
   const setLayoutMode = useFileStore((s) => s.setLayoutMode);
+
+  useEffect(() => {
+    if (open && viewMode === "search") {
+      void refreshAllTags();
+    }
+  }, [open, viewMode, refreshAllTags]);
 
   return (
     <IOSSheet open={open} onClose={onClose} title="表示オプション" tall>
@@ -84,6 +95,29 @@ export function IOSFilterSheet({ open, onClose }: IOSFilterSheetProps) {
             </div>
           )}
         </section>
+
+        {viewMode === "search" && (
+          <section>
+            <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">
+              検索タグ
+            </h3>
+            <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
+              <IOSListRow
+                label="すべて"
+                onPress={() => setSearchTagId(null)}
+                trailing={!searchTagId ? <span className="text-blue-400">✓</span> : null}
+              />
+              {allTags.map((tag) => (
+                <IOSListRow
+                  key={tag.id}
+                  label={tag.name}
+                  onPress={() => setSearchTagId(tag.id)}
+                  trailing={searchTagId === tag.id ? <span className="text-blue-400">✓</span> : null}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         <section>
           <h3 className="ios-section-header mb-2 px-1 text-xs uppercase text-neutral-500">レイアウト</h3>

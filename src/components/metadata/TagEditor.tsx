@@ -26,6 +26,8 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
   const setAllTags = useFileStore((s) => s.setAllTags);
   const updateFileInList = useFileStore((s) => s.updateFileInList);
   const selectedFile = useFileStore((s) => s.selectedFile);
+  const setSearchTagId = useFileStore((s) => s.setSearchTagId);
+  const setSearchScope = useFileStore((s) => s.setSearchScope);
 
   function syncFileTagIds(fileTags: Tag[]) {
     if (!selectedFile || selectedFile.id !== fileId) return;
@@ -65,6 +67,21 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
     setApplying(true);
     try {
       const result = await applyPromptTagsForFile(fileId, absolutePath);
+      // #region agent log
+      fetch("http://127.0.0.1:7320/ingest/347134e6-6e1f-40fb-aee0-563e8b0e88ea", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d70361" },
+        body: JSON.stringify({
+          sessionId: "d70361",
+          location: "TagEditor.tsx:handleApplyFromPrompt",
+          message: "apply prompt tags result",
+          hypothesisId: "D",
+          data: { fileId, result, tagCount: tags.length },
+          timestamp: Date.now(),
+          runId: "initial",
+        }),
+      }).catch(() => {});
+      // #endregion
       if (result.skipReason) {
         toast(formatSkipReason(result.skipReason), "error");
         return;
@@ -93,6 +110,11 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
 
   const unattached = allTags.filter((t) => !tags.some((ft) => ft.id === t.id));
 
+  function handleSearchByTag(tagId: string) {
+    setSearchScope("global");
+    setSearchTagId(tagId);
+  }
+
   return (
     <div className="space-y-3 border-t border-neutral-800 pt-3">
       <div className="flex items-center justify-between gap-2">
@@ -112,7 +134,14 @@ export function TagEditor({ fileId, absolutePath, tags, allTags }: TagEditorProp
             key={tag.id}
             className="inline-flex items-center gap-1 rounded-full bg-neutral-800 px-2 py-1 text-xs"
           >
-            {tag.name}
+            <button
+              type="button"
+              onClick={() => handleSearchByTag(tag.id)}
+              className="hover:text-blue-300"
+              title="このタグで検索"
+            >
+              {tag.name}
+            </button>
             {tag.kind === "auto" && (
               <span className="rounded bg-neutral-700 px-1 text-[10px] text-neutral-400">auto</span>
             )}

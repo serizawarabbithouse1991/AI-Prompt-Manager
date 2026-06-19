@@ -187,6 +187,7 @@ export type RebuildDanbooruCacheResult = {
 export type SearchFilters = {
   sourceApp?: string | null;
   model?: string | null;
+  tagId?: string | null;
   limit?: number;
   offset?: number;
 };

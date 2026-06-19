@@ -1,12 +1,16 @@
 import type { FileEntry, FileFilter, LayoutMode, SortField, SortOrder } from "@/features/files/types";
 
+import type { Tag } from "@/features/tags/types";
+
 export function filterFilesByQuery(
   files: FileEntry[],
   query: string,
   includeMetadata = false,
+  allTags: Tag[] = [],
 ): FileEntry[] {
   const q = query.trim().toLowerCase();
   if (!q) return files;
+  const tagNameById = new Map(allTags.map((tag) => [tag.id, tag.name.toLowerCase()]));
   return files.filter(
     (f) =>
       !f.isDirectory &&
@@ -14,7 +18,8 @@ export function filterFilesByQuery(
         (f.extension?.toLowerCase().includes(q) ?? false) ||
         (includeMetadata &&
           ((f.promptPreview?.toLowerCase().includes(q) ?? false) ||
-            (f.aiModel?.toLowerCase().includes(q) ?? false)))),
+            (f.aiModel?.toLowerCase().includes(q) ?? false))) ||
+        (f.tagIds?.some((tagId) => tagNameById.get(tagId)?.includes(q) ?? false) ?? false)),
   );
 }
 

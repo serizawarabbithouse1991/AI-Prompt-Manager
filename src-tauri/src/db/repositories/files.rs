@@ -393,12 +393,350 @@ pub fn attach_thumbnail_paths(conn: &Connection, files: &mut [FileEntry]) -> Res
 }
 
 pub fn search_files(conn: &Connection, query: &str) -> Result<Vec<FileEntry>, String> {
-    if let Ok(files) = search_files_fts(conn, query, None, None, 200, 0) {
-        if !files.is_empty() {
-            return Ok(files);
+    search_files_filtered(conn, query, None, None, None, 200, 0)
+}
+
+pub fn search_files_filtered(
+    conn: &Connection,
+    query: &str,
+    source_app: Option<&str>,
+    model_filter: Option<&str>,
+    tag_id: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<FileEntry>, String> {
+    let query = query.trim();
+    let limit = limit.max(1);
+    let offset = offset.max(0);
+
+    if query.is_empty() && tag_id.is_none() {
+        return Ok(Vec::new());
+    }
+
+    if query.is_empty() {
+        return list_files_by_tag(conn, tag_id.unwrap(), source_app, model_filter, limit, offset);
+    }
+
+    let fetch_limit = limit + offset;
+    let fts_files =
+        search_files_fts(conn, query, source_app, model_filter, tag_id, fetch_limit, 0)?;
+    let tag_files = search_files_by_tag_name(
+        conn,
+        query,
+        tag_id,
+        source_app,
+        model_filter,
+        fetch_limit,
+        0,
+    )?;
+    let merged = merge_search_results(fts_files, tag_files);
+    let start = offset as usize;
+    Ok(merged
+        .into_iter()
+        .skip(start)
+        .take(limit as usize)
+        .collect())
+}
+
+fn merge_search_results(mut a: Vec<FileEntry>, b: Vec<FileEntry>) -> Vec<FileEntry> {
+    let mut seen = std::collections::HashSet::new();
+    let mut merged = Vec::new();
+    for file in a.drain(..).chain(b) {
+        if seen.insert(file.id.clone()) {
+            merged.push(file);
         }
     }
-    search_files_like(conn, query)
+    merged.sort_by(|left, right| left.display_name.cmp(&right.display_name));
+    merged
+}
+
+pub fn list_files_by_tag(
+    conn: &Connection,
+    tag_id: &str,
+    source_app: Option<&str>,
+    model_filter: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<FileEntry>, String> {
+    let model_pattern = model_filter.map(|model| format!("%{model}%"));
+    let limit = limit.max(1);
+    let offset = offset.max(0);
+
+    let mut files = match (source_app, model_pattern.as_deref()) {
+        (Some(app), Some(model)) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id AND ft.tag_id = ?1
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                      AND m.source_app = ?2 AND m.model LIKE ?3
+                    ORDER BY f.display_name
+                    LIMIT ?4 OFFSET ?5
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![tag_id, app, model, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (Some(app), None) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id AND ft.tag_id = ?1
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0 AND m.source_app = ?2
+                    ORDER BY f.display_name
+                    LIMIT ?3 OFFSET ?4
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![tag_id, app, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, Some(model)) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id AND ft.tag_id = ?1
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0 AND m.model LIKE ?2
+                    ORDER BY f.display_name
+                    LIMIT ?3 OFFSET ?4
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![tag_id, model, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, None) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id AND ft.tag_id = ?1
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                    ORDER BY f.display_name
+                    LIMIT ?2 OFFSET ?3
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![tag_id, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+    };
+
+    attach_db_metadata(conn, &mut files)?;
+    Ok(files)
+}
+
+pub fn search_files_by_tag_name(
+    conn: &Connection,
+    query: &str,
+    tag_id: Option<&str>,
+    source_app: Option<&str>,
+    model_filter: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<FileEntry>, String> {
+    let pattern = format!("%{}%", query);
+    let model_pattern = model_filter.map(|model| format!("%{model}%"));
+    let limit = limit.max(1);
+    let offset = offset.max(0);
+    let tag_filter = tag_id.is_some();
+
+    let mut files = match (source_app, model_pattern.as_deref(), tag_filter) {
+        (Some(app), Some(model), true) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id
+                    INNER JOIN tags t ON t.id = ft.tag_id
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                      AND t.name LIKE ?1 AND m.source_app = ?2 AND m.model LIKE ?3
+                      AND EXISTS (
+                        SELECT 1 FROM file_tags ft2
+                        WHERE ft2.file_id = f.id AND ft2.tag_id = ?4
+                      )
+                    ORDER BY f.display_name
+                    LIMIT ?5 OFFSET ?6
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(
+                    params![pattern, app, model, tag_id, limit, offset],
+                    row_to_file,
+                )
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (Some(app), Some(model), false) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id
+                    INNER JOIN tags t ON t.id = ft.tag_id
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                      AND t.name LIKE ?1 AND m.source_app = ?2 AND m.model LIKE ?3
+                    ORDER BY f.display_name
+                    LIMIT ?4 OFFSET ?5
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![pattern, app, model, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (Some(app), None, true) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id
+                    INNER JOIN tags t ON t.id = ft.tag_id
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                      AND t.name LIKE ?1 AND m.source_app = ?2
+                      AND EXISTS (
+                        SELECT 1 FROM file_tags ft2
+                        WHERE ft2.file_id = f.id AND ft2.tag_id = ?3
+                      )
+                    ORDER BY f.display_name
+                    LIMIT ?4 OFFSET ?5
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![pattern, app, tag_id, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (Some(app), None, false) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id
+                    INNER JOIN tags t ON t.id = ft.tag_id
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                      AND t.name LIKE ?1 AND m.source_app = ?2
+                    ORDER BY f.display_name
+                    LIMIT ?3 OFFSET ?4
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![pattern, app, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, Some(model), true) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id
+                    INNER JOIN tags t ON t.id = ft.tag_id
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                      AND t.name LIKE ?1 AND m.model LIKE ?2
+                      AND EXISTS (
+                        SELECT 1 FROM file_tags ft2
+                        WHERE ft2.file_id = f.id AND ft2.tag_id = ?3
+                      )
+                    ORDER BY f.display_name
+                    LIMIT ?4 OFFSET ?5
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![pattern, model, tag_id, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, Some(model), false) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id
+                    INNER JOIN tags t ON t.id = ft.tag_id
+                    LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                      AND t.name LIKE ?1 AND m.model LIKE ?2
+                    ORDER BY f.display_name
+                    LIMIT ?3 OFFSET ?4
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![pattern, model, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, None, true) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id
+                    INNER JOIN tags t ON t.id = ft.tag_id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0
+                      AND t.name LIKE ?1
+                      AND EXISTS (
+                        SELECT 1 FROM file_tags ft2
+                        WHERE ft2.file_id = f.id AND ft2.tag_id = ?2
+                      )
+                    ORDER BY f.display_name
+                    LIMIT ?3 OFFSET ?4
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![pattern, tag_id, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, None, false) => {
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT DISTINCT f.* FROM files f
+                    INNER JOIN file_tags ft ON ft.file_id = f.id
+                    INNER JOIN tags t ON t.id = ft.tag_id
+                    WHERE f.is_deleted = 0 AND f.is_directory = 0 AND t.name LIKE ?1
+                    ORDER BY f.display_name
+                    LIMIT ?2 OFFSET ?3
+                    "#,
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![pattern, limit, offset], row_to_file)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+    };
+
+    attach_db_metadata(conn, &mut files)?;
+    Ok(files)
 }
 
 pub fn search_files_like(conn: &Connection, query: &str) -> Result<Vec<FileEntry>, String> {
@@ -431,6 +769,7 @@ pub fn search_files_fts(
     query: &str,
     source_app: Option<&str>,
     model_filter: Option<&str>,
+    tag_id: Option<&str>,
     limit: i64,
     offset: i64,
 ) -> Result<Vec<FileEntry>, String> {
@@ -446,9 +785,27 @@ pub fn search_files_fts(
     let model_pattern = model_filter.map(|m| format!("%{m}%"));
     let limit = limit.max(1);
     let offset = offset.max(0);
+    let tag_filter = tag_id.is_some();
 
-    let mut files = match (source_app, model_pattern.as_deref()) {
-        (Some(app), Some(mp)) => {
+    let mut files = match (source_app, model_pattern.as_deref(), tag_filter) {
+        (Some(app), Some(mp), true) => {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT f.* FROM files f
+                INNER JOIN files_fts fts ON fts.file_id = f.id
+                LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                WHERE f.is_deleted = 0 AND f.is_directory = 0
+                  AND fts MATCH ?1 AND m.source_app = ?2 AND m.model LIKE ?3
+                  AND EXISTS (
+                    SELECT 1 FROM file_tags ft WHERE ft.file_id = f.id AND ft.tag_id = ?4
+                  )
+                ORDER BY f.display_name LIMIT ?5 OFFSET ?6
+                "#,
+            ).map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![fts_query, app, mp, tag_id, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (Some(app), Some(mp), false) => {
             let mut stmt = conn.prepare(
                 r#"
                 SELECT f.* FROM files f
@@ -462,7 +819,24 @@ pub fn search_files_fts(
             let rows = stmt.query_map(params![fts_query, app, mp, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
         }
-        (Some(app), None) => {
+        (Some(app), None, true) => {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT f.* FROM files f
+                INNER JOIN files_fts fts ON fts.file_id = f.id
+                LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                WHERE f.is_deleted = 0 AND f.is_directory = 0
+                  AND fts MATCH ?1 AND m.source_app = ?2
+                  AND EXISTS (
+                    SELECT 1 FROM file_tags ft WHERE ft.file_id = f.id AND ft.tag_id = ?3
+                  )
+                ORDER BY f.display_name LIMIT ?4 OFFSET ?5
+                "#,
+            ).map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![fts_query, app, tag_id, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (Some(app), None, false) => {
             let mut stmt = conn.prepare(
                 r#"
                 SELECT f.* FROM files f
@@ -476,7 +850,24 @@ pub fn search_files_fts(
             let rows = stmt.query_map(params![fts_query, app, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
         }
-        (None, Some(mp)) => {
+        (None, Some(mp), true) => {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT f.* FROM files f
+                INNER JOIN files_fts fts ON fts.file_id = f.id
+                LEFT JOIN ai_generation_metadata m ON m.file_id = f.id
+                WHERE f.is_deleted = 0 AND f.is_directory = 0
+                  AND fts MATCH ?1 AND m.model LIKE ?2
+                  AND EXISTS (
+                    SELECT 1 FROM file_tags ft WHERE ft.file_id = f.id AND ft.tag_id = ?3
+                  )
+                ORDER BY f.display_name LIMIT ?4 OFFSET ?5
+                "#,
+            ).map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![fts_query, mp, tag_id, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, Some(mp), false) => {
             let mut stmt = conn.prepare(
                 r#"
                 SELECT f.* FROM files f
@@ -490,7 +881,22 @@ pub fn search_files_fts(
             let rows = stmt.query_map(params![fts_query, mp, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
         }
-        (None, None) => {
+        (None, None, true) => {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT f.* FROM files f
+                INNER JOIN files_fts fts ON fts.file_id = f.id
+                WHERE f.is_deleted = 0 AND f.is_directory = 0 AND fts MATCH ?1
+                  AND EXISTS (
+                    SELECT 1 FROM file_tags ft WHERE ft.file_id = f.id AND ft.tag_id = ?2
+                  )
+                ORDER BY f.display_name LIMIT ?3 OFFSET ?4
+                "#,
+            ).map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![fts_query, tag_id, limit, offset], |row| row_to_file(row)).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        }
+        (None, None, false) => {
             let mut stmt = conn.prepare(
                 r#"
                 SELECT f.* FROM files f

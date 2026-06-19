@@ -25,6 +25,7 @@ export function Toolbar() {
   const platformName = useFileStore((s) => s.platformName);
   const viewMode = useFileStore((s) => s.viewMode);
   const searchScope = useFileStore((s) => s.searchScope);
+  const searchTagId = useFileStore((s) => s.searchTagId);
   const setSearchScope = useFileStore((s) => s.setSearchScope);
 
   useEffect(() => {
@@ -34,11 +35,12 @@ export function Toolbar() {
       const target = e.target as HTMLInputElement;
       const value = target.value.trim();
       if (value) void runSearch(value);
+      else if (searchTagId) void runSearch("");
       else if (viewMode === "search") void setViewMode("browse");
     };
     input.addEventListener("change", handler);
     return () => input.removeEventListener("change", handler);
-  }, [runSearch, setViewMode, viewMode]);
+  }, [runSearch, searchTagId, setViewMode, viewMode]);
 
   async function handleOpenFolder() {
     const selected = await open({ directory: true, multiple: false });
@@ -94,7 +96,7 @@ export function Toolbar() {
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             const value = (e.target as HTMLInputElement).value.trim();
-            if (value) void runSearch(value);
+            if (value || searchTagId) void runSearch(value);
           }
         }}
       />
