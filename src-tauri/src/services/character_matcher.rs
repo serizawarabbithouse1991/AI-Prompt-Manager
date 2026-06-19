@@ -107,6 +107,48 @@ pub fn tokenize_prompt(prompt: &str) -> Vec<String> {
     tags
 }
 
+/// 自動タグ付け（All モード）で除外する品質タグの内蔵リスト。
+/// すべて `normalize_tag` 互換（小文字・空白区切り）で記述する。
+const QUALITY_TAGS: &[&str] = &[
+    "masterpiece",
+    "best quality",
+    "high quality",
+    "normal quality",
+    "low quality",
+    "worst quality",
+    "bad quality",
+    "amazing quality",
+    "great quality",
+    "average quality",
+    "very aesthetic",
+    "aesthetic",
+    "best aesthetic",
+    "displeasing",
+    "very displeasing",
+    "absurdres",
+    "highres",
+    "lowres",
+    "ultra detailed",
+    "extremely detailed",
+    "highly detailed",
+    "super detailed",
+    "incredibly detailed",
+    "official art",
+    "best illustration",
+];
+
+/// 与えられた正規化済みタグが品質タグかどうかを判定する。
+/// 比較時にハイフンを空白へ置換し、`ultra-detailed` と `ultra detailed` の両方に対応する。
+pub fn is_quality_tag(normalized: &str) -> bool {
+    let candidate = normalized.replace('-', " ");
+    QUALITY_TAGS.iter().any(|q| *q == candidate)
+}
+
+/// 品質タグを除外したタグ一覧を返す。
+pub fn filter_quality_tags(tags: Vec<String>) -> Vec<String> {
+    tags.into_iter().filter(|t| !is_quality_tag(t)).collect()
+}
+
 pub fn expand_tag_candidates(tags: &[String]) -> Vec<String> {
     let mut seen: HashSet<String> = tags.iter().cloned().collect();
     let mut candidates = tags.to_vec();
@@ -434,5 +476,29 @@ mod tests {
         let tags = vec!["hatsune".to_string(), "miku".to_string(), "solo".to_string()];
         let expanded = expand_tag_candidates(&tags);
         assert!(expanded.contains(&"hatsune miku".to_string()));
+    }
+
+    #[test]
+    fn is_quality_tag_detects_quality_words() {
+        assert!(is_quality_tag("masterpiece"));
+        assert!(is_quality_tag("best quality"));
+        assert!(is_quality_tag("ultra-detailed"));
+        assert!(!is_quality_tag("1girl"));
+        assert!(!is_quality_tag("hatsune miku"));
+    }
+
+    #[test]
+    fn filter_quality_tags_removes_only_quality() {
+        let tags = vec![
+            "1girl".to_string(),
+            "masterpiece".to_string(),
+            "hatsune miku".to_string(),
+            "best quality".to_string(),
+        ];
+        let filtered = filter_quality_tags(tags);
+        assert_eq!(
+            filtered,
+            vec!["1girl".to_string(), "hatsune miku".to_string()]
+        );
     }
 }

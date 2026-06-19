@@ -14,9 +14,10 @@ pub async fn set_prompt_tag_settings(
     app: AppHandle,
     mode: String,
     auto_tag_on_import: bool,
+    exclude_quality_tags: bool,
 ) -> Result<(), String> {
     with_conn(&app, |conn| {
-        prompt_tagger::set_prompt_tag_settings(conn, &mode, auto_tag_on_import)
+        prompt_tagger::set_prompt_tag_settings(conn, &mode, auto_tag_on_import, exclude_quality_tags)
     })
 }
 

@@ -154,6 +154,7 @@ export type PromptTagMode = "all" | "character";
 export type PromptTagSettings = {
   mode: PromptTagMode;
   autoTagOnImport: boolean;
+  excludeQualityTags: boolean;
 };
 
 export type TagApplyResult = {

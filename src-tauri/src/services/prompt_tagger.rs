@@ -2,7 +2,7 @@ use rusqlite::{params, Connection};
 
 use crate::db::repositories::tags as tags_repo;
 use crate::models::prompt_tag::{BatchTagApplyResult, PromptTagSettings, TagApplyResult};
-use crate::services::character_matcher::{tokenize_prompt, SKIP_NO_PROMPT};
+use crate::services::character_matcher::{filter_quality_tags, tokenize_prompt, SKIP_NO_PROMPT};
 use crate::services::danbooru_index::{
     find_characters_in_prompt, get_setting, is_cache_ready, set_setting,
     SKIP_CACHE_NOT_READY,
@@ -10,6 +10,7 @@ use crate::services::danbooru_index::{
 
 pub const SETTING_PROMPT_TAG_MODE: &str = "prompt_tag_mode";
 pub const SETTING_AUTO_TAG_ON_IMPORT: &str = "auto_tag_on_import";
+pub const SETTING_EXCLUDE_QUALITY_TAGS: &str = "exclude_quality_tags";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptTagMode {
@@ -39,9 +40,12 @@ pub fn get_prompt_tag_settings(conn: &Connection) -> Result<PromptTagSettings, S
         .unwrap_or_else(|| "all".to_string());
     let auto_raw = get_setting(conn, SETTING_AUTO_TAG_ON_IMPORT)?
         .unwrap_or_else(|| "true".to_string());
+    let exclude_raw = get_setting(conn, SETTING_EXCLUDE_QUALITY_TAGS)?
+        .unwrap_or_else(|| "true".to_string());
     Ok(PromptTagSettings {
         mode,
         auto_tag_on_import: auto_raw != "false",
+        exclude_quality_tags: exclude_raw != "false",
     })
 }
 
@@ -49,6 +53,7 @@ pub fn set_prompt_tag_settings(
     conn: &Connection,
     mode: &str,
     auto_tag_on_import: bool,
+    exclude_quality_tags: bool,
 ) -> Result<(), String> {
     let mode = if mode == "character" { "character" } else { "all" };
     set_setting(conn, SETTING_PROMPT_TAG_MODE, mode)?;
@@ -57,6 +62,11 @@ pub fn set_prompt_tag_settings(
         SETTING_AUTO_TAG_ON_IMPORT,
         if auto_tag_on_import { "true" } else { "false" },
     )?;
+    set_setting(
+        conn,
+        SETTING_EXCLUDE_QUALITY_TAGS,
+        if exclude_quality_tags { "true" } else { "false" },
+    )?;
     Ok(())
 }
 
@@ -64,9 +74,17 @@ pub fn resolve_tags(
     conn: &Connection,
     prompt: &str,
     mode: PromptTagMode,
+    exclude_quality: bool,
 ) -> Result<Vec<String>, String> {
     match mode {
-        PromptTagMode::All => Ok(tokenize_prompt(prompt)),
+        PromptTagMode::All => {
+            let tokens = tokenize_prompt(prompt);
+            if exclude_quality {
+                Ok(filter_quality_tags(tokens))
+            } else {
+                Ok(tokens)
+            }
+        }
         PromptTagMode::Character => {
             if !is_cache_ready(conn)? {
                 return Err(SKIP_CACHE_NOT_READY.to_string());
@@ -112,7 +130,10 @@ pub fn apply_prompt_tags_for_file(
         });
     }
 
-    let tag_names = match resolve_tags(conn, &prompt, mode) {
+    let exclude_quality = get_prompt_tag_settings(conn)
+        .map(|s| s.exclude_quality_tags)
+        .unwrap_or(true);
+    let tag_names = match resolve_tags(conn, &prompt, mode, exclude_quality) {
         Ok(names) => names,
         Err(reason) if reason == SKIP_CACHE_NOT_READY => {
             return Ok(TagApplyResult {
@@ -193,6 +214,10 @@ pub fn batch_apply_prompt_tags(
         mapped.filter_map(|r| r.ok()).collect()
     };
 
+    let exclude_quality = get_prompt_tag_settings(conn)
+        .map(|s| s.exclude_quality_tags)
+        .unwrap_or(true);
+
     let mut result = BatchTagApplyResult::default();
     result.files_processed = rows.len() as u32;
 
@@ -202,7 +227,7 @@ pub fn batch_apply_prompt_tags(
             continue;
         };
 
-        let tag_names = resolve_tags(conn, &prompt, mode)?;
+        let tag_names = resolve_tags(conn, &prompt, mode, exclude_quality)?;
         if tag_names.is_empty() {
             continue;
         }
@@ -313,6 +338,34 @@ mod tests {
         .unwrap();
         assert_eq!(second.tags_added, 0);
         assert!(second.tags_skipped > 0);
+    }
+
+    fn tag_exists(conn: &Connection, name: &str) -> bool {
+        conn.query_row(
+            "SELECT 1 FROM tags WHERE name = ?1 LIMIT 1",
+            params![name],
+            |_| Ok(()),
+        )
+        .is_ok()
+    }
+
+    #[test]
+    fn all_mode_excludes_quality_tags_by_default() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_db(&conn);
+        apply_prompt_tags_for_file(&conn, "f1", "/tmp/test.png", PromptTagMode::All).unwrap();
+        assert!(tag_exists(&conn, "1girl"));
+        assert!(tag_exists(&conn, "hatsune miku"));
+        assert!(!tag_exists(&conn, "masterpiece"));
+    }
+
+    #[test]
+    fn all_mode_keeps_quality_when_disabled() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_db(&conn);
+        set_prompt_tag_settings(&conn, "all", true, false).unwrap();
+        apply_prompt_tags_for_file(&conn, "f1", "/tmp/test.png", PromptTagMode::All).unwrap();
+        assert!(tag_exists(&conn, "masterpiece"));
     }
 
     #[test]

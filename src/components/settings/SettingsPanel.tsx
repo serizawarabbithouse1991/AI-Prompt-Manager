@@ -117,7 +117,13 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
     void refreshDanbooruStatus();
     void getPromptTagSettings()
       .then(setPromptTagSettingsState)
-      .catch(() => setPromptTagSettingsState({ mode: "all", autoTagOnImport: true }));
+      .catch(() =>
+        setPromptTagSettingsState({
+          mode: "all",
+          autoTagOnImport: true,
+          excludeQualityTags: true,
+        }),
+      );
     const unlisten = listen<DanbooruCacheProgress>("danbooru-cache-progress", (event) => {
       setCacheProgress(event.payload);
     });
@@ -128,9 +134,14 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
 
   async function handlePromptTagModeChange(mode: PromptTagMode) {
     const auto = promptTagSettings?.autoTagOnImport ?? true;
+    const excludeQuality = promptTagSettings?.excludeQualityTags ?? true;
     try {
-      await setPromptTagSettings(mode, auto);
-      setPromptTagSettingsState({ mode, autoTagOnImport: auto });
+      await setPromptTagSettings(mode, auto, excludeQuality);
+      setPromptTagSettingsState({
+        mode,
+        autoTagOnImport: auto,
+        excludeQualityTags: excludeQuality,
+      });
     } catch (e) {
       toast(String(e), "error");
     }
@@ -138,9 +149,29 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
 
   async function handleAutoTagOnImportToggle(enabled: boolean) {
     const mode = promptTagSettings?.mode ?? "all";
+    const excludeQuality = promptTagSettings?.excludeQualityTags ?? true;
     try {
-      await setPromptTagSettings(mode, enabled);
-      setPromptTagSettingsState({ mode, autoTagOnImport: enabled });
+      await setPromptTagSettings(mode, enabled, excludeQuality);
+      setPromptTagSettingsState({
+        mode,
+        autoTagOnImport: enabled,
+        excludeQualityTags: excludeQuality,
+      });
+    } catch (e) {
+      toast(String(e), "error");
+    }
+  }
+
+  async function handleExcludeQualityTagsToggle(enabled: boolean) {
+    const mode = promptTagSettings?.mode ?? "all";
+    const auto = promptTagSettings?.autoTagOnImport ?? true;
+    try {
+      await setPromptTagSettings(mode, auto, enabled);
+      setPromptTagSettingsState({
+        mode,
+        autoTagOnImport: auto,
+        excludeQualityTags: enabled,
+      });
     } catch (e) {
       toast(String(e), "error");
     }
@@ -720,6 +751,14 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
               onChange={(e) => void handleAutoTagOnImportToggle(e.target.checked)}
             />
             取り込み時に自動でタグ付け
+          </label>
+          <label className="flex items-center gap-2 text-xs text-neutral-400">
+            <input
+              type="checkbox"
+              checked={promptTagSettings?.excludeQualityTags ?? true}
+              onChange={(e) => void handleExcludeQualityTagsToggle(e.target.checked)}
+            />
+            品質タグ（masterpiece 等）を除外
           </label>
           <button
             type="button"

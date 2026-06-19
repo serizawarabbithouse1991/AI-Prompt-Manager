@@ -47,4 +47,5 @@ impl Default for BatchTagApplyResult {
 pub struct PromptTagSettings {
     pub mode: String,
     pub auto_tag_on_import: bool,
+    pub exclude_quality_tags: bool,
 }

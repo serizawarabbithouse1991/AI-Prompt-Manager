@@ -348,8 +348,13 @@ export async function getPromptTagSettings(): Promise<PromptTagSettings> {
 export async function setPromptTagSettings(
   mode: PromptTagMode,
   autoTagOnImport: boolean,
+  excludeQualityTags: boolean,
 ): Promise<void> {
-  return invoke("set_prompt_tag_settings", { mode, autoTagOnImport });
+  return invoke("set_prompt_tag_settings", {
+    mode,
+    autoTagOnImport,
+    excludeQualityTags,
+  });
 }
 
 export async function applyPromptTagsForFile(
