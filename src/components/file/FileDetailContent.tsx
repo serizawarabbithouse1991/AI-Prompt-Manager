@@ -34,6 +34,7 @@ export function FileDetailContent({ file, showPreview = true }: FileDetailConten
   const tags = useFileStore((s) => s.tags);
   const allTags = useFileStore((s) => s.allTags);
   const refresh = useFileStore((s) => s.refresh);
+  const updateFileInList = useFileStore((s) => s.updateFileInList);
   const platformName = useFileStore((s) => s.platformName);
   const collections = useFileStore((s) => s.collections);
   const setCollections = useFileStore((s) => s.setCollections);
@@ -60,8 +61,14 @@ export function FileDetailContent({ file, showPreview = true }: FileDetailConten
   }
 
   async function handleFavorite() {
-    await setFavorite(file.id, !file.isFavorite, file.absolutePath);
-    await refresh();
+    const next = !file.isFavorite;
+    updateFileInList({ ...file, isFavorite: next });
+    try {
+      await setFavorite(file.id, next, file.absolutePath);
+    } catch (e) {
+      updateFileInList({ ...file, isFavorite: !next });
+      toast(String(e), "error");
+    }
   }
 
   async function handleRename() {
@@ -126,20 +133,12 @@ export function FileDetailContent({ file, showPreview = true }: FileDetailConten
         )}
       </div>
 
-      {!file.isDirectory && (
-        <>
-          <PromptPanel metadata={metadata} filePath={file.absolutePath} />
-          <MetadataPanel metadata={metadata} fileId={file.id} />
-          <TagEditor
-            fileId={file.id}
-            absolutePath={file.absolutePath}
-            tags={tags}
-            allTags={allTags}
-          />
-        </>
-      )}
-
-      <div className="flex flex-wrap gap-2 border-t border-neutral-800 pt-3">
+      <div
+        className={[
+          "flex flex-wrap gap-2",
+          !file.isDirectory ? "border-b border-neutral-800 pb-3" : "",
+        ].join(" ")}
+      >
         <button
           type="button"
           onClick={() => void handleFavorite()}
@@ -241,6 +240,19 @@ export function FileDetailContent({ file, showPreview = true }: FileDetailConten
           </>
         )}
       </div>
+
+      {!file.isDirectory && (
+        <>
+          <PromptPanel metadata={metadata} filePath={file.absolutePath} />
+          <MetadataPanel metadata={metadata} fileId={file.id} />
+          <TagEditor
+            fileId={file.id}
+            absolutePath={file.absolutePath}
+            tags={tags}
+            allTags={allTags}
+          />
+        </>
+      )}
 
       {renaming && (
         <div className="flex gap-2">
