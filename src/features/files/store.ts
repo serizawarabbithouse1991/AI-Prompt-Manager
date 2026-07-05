@@ -184,6 +184,7 @@ type FileStore = {
   setImportProgress: (progress: ImportProgress | null) => void;
   setScanning: (scanning: boolean) => void;
   runAutoPhotoScanIfEnabled: () => Promise<void>;
+  prependImportedFiles: (incoming: FileEntry[]) => void;
   refreshAiLibraryQuiet: () => Promise<void>;
   refresh: () => Promise<void>;
   setMetadata: (metadata: AIGenerationMetadata | null) => void;
@@ -362,7 +363,10 @@ export const useFileStore = create<FileStore>((set, get) => ({
       const message = formatPhotoScanResult(result);
       set({ scanProgress: message, batchProgress: null });
       if ((result.novelaiCount ?? result.importedCount) > 0) {
-        await get().setViewMode("ai-library");
+        const { viewMode } = get();
+        if (viewMode !== "ai-library") {
+          await get().setViewMode("ai-library");
+        }
       }
     } catch (e) {
       set({ scanProgress: String(e) });
@@ -388,6 +392,17 @@ export const useFileStore = create<FileStore>((set, get) => ({
     } catch {
       // バックグラウンドスキャン中の一時エラーは無視
     }
+  },
+
+  prependImportedFiles: (incoming) => {
+    if (incoming.length === 0) return;
+    set((state) => {
+      if (state.viewMode !== "ai-library") return state;
+      const existingIds = new Set(state.files.map((file) => file.id));
+      const fresh = incoming.filter((file) => !existingIds.has(file.id));
+      if (fresh.length === 0) return state;
+      return { files: [...fresh, ...state.files] };
+    });
   },
 
   setMetadata: (metadata) => set({ metadata }),

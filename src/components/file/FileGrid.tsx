@@ -47,7 +47,7 @@ function FileThumbnail({ file }: { file: FileEntry }) {
         key={`${file.id}:${useOriginal ? "orig" : "thumb"}`}
         src={convertFileSrc(imageSrc)}
         alt={file.displayName}
-        loading="lazy"
+        loading={file.thumbnailPath ? "eager" : "lazy"}
         decoding="async"
         onLoad={() => setLoaded(true)}
         onError={() => {

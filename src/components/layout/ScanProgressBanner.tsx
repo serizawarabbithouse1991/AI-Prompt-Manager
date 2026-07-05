@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useFileStore } from "@/features/files/store";
-import type { ImportProgress } from "@/features/files/types";
+import type { FileEntry, ImportProgress } from "@/features/files/types";
 
 function phaseLabel(phase: ImportProgress["phase"]): string {
   return phase === "export" ? "書き出し" : "判別・取込";
@@ -20,11 +20,9 @@ export function ScanProgressBanner() {
   const setImportProgress = useFileStore((s) => s.setImportProgress);
   const setScanProgress = useFileStore((s) => s.setScanProgress);
   const setBatchProgress = useFileStore((s) => s.setBatchProgress);
-  const lastNovelaiRef = useRef(0);
-  const lastRefreshAtRef = useRef(0);
-
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenProgress: (() => void) | undefined;
+    let unlistenImported: (() => void) | undefined;
 
     void listen<ImportProgress>("import-progress", (event) => {
       const payload = {
@@ -41,32 +39,21 @@ export function ScanProgressBanner() {
           : payload.message;
       setBatchProgress(progressText);
       setScanProgress(progressText);
-
-      const novelai = payload.novelaiCount ?? 0;
-      const now = Date.now();
-      const shouldRefresh =
-        novelai > lastNovelaiRef.current &&
-        (now - lastRefreshAtRef.current > 1500 || novelai - lastNovelaiRef.current >= 2);
-      if (shouldRefresh) {
-        lastNovelaiRef.current = novelai;
-        lastRefreshAtRef.current = now;
-        void useFileStore.getState().refreshAiLibraryQuiet();
-      }
     }).then((fn) => {
-      unlisten = fn;
+      unlistenProgress = fn;
+    });
+
+    void listen<FileEntry[]>("library-files-imported", (event) => {
+      useFileStore.getState().prependImportedFiles(event.payload);
+    }).then((fn) => {
+      unlistenImported = fn;
     });
 
     return () => {
-      unlisten?.();
+      unlistenProgress?.();
+      unlistenImported?.();
     };
   }, [setBatchProgress, setImportProgress, setScanProgress]);
-
-  useEffect(() => {
-    if (!scanning && !importProgress) {
-      lastNovelaiRef.current = 0;
-      lastRefreshAtRef.current = 0;
-    }
-  }, [scanning, importProgress]);
 
   if (!scanning && !importProgress) {
     return null;

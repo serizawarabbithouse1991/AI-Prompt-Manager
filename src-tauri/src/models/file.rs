@@ -70,6 +70,8 @@ pub struct ImportResult {
     pub assign_skip_reason: Option<String>,
     #[serde(default)]
     pub tags_added_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub imported_files: Vec<FileEntry>,
 }
 
 pub fn detect_file_kind(extension: &str, is_directory: bool) -> String {

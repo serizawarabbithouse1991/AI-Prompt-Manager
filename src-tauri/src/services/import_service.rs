@@ -23,6 +23,7 @@ pub struct ImportOptions {
     pub novelai_only: bool,
     pub defer_thumbnails: bool,
     pub defer_side_effects: bool,
+    pub fast_thumbnails: bool,
 }
 
 impl ImportOptions {
@@ -31,6 +32,16 @@ impl ImportOptions {
             novelai_only,
             defer_thumbnails: true,
             defer_side_effects: true,
+            fast_thumbnails: false,
+        }
+    }
+
+    pub fn photo_bulk(novelai_only: bool) -> Self {
+        Self {
+            novelai_only,
+            defer_thumbnails: false,
+            defer_side_effects: true,
+            fast_thumbnails: true,
         }
     }
 
@@ -39,6 +50,7 @@ impl ImportOptions {
             novelai_only,
             defer_thumbnails: false,
             defer_side_effects: false,
+            fast_thumbnails: false,
         }
     }
 }
@@ -174,14 +186,26 @@ where
             continue;
         }
 
-        import_file(
-            conn,
-            app_data,
-            library_dir,
-            &source,
-            options,
-            &mut result,
-        );
+        match import_image_file(conn, app_data, library_dir, &source, options) {
+            Ok(ImportImageOutcome::Imported(entry)) => {
+                result.imported_count += 1;
+                result.image_count += 1;
+                if options.novelai_only {
+                    result.novelai_count += 1;
+                }
+                result.imported_files.push(entry);
+            }
+            Ok(ImportImageOutcome::Skipped) => {
+                result.skipped_count += 1;
+            }
+            Ok(ImportImageOutcome::Duplicate) => {
+                result.duplicate_count += 1;
+            }
+            Err(e) => {
+                eprintln!("import image error: {e}");
+                result.error_count += 1;
+            }
+        }
 
         let _ = fs::remove_file(&source);
 
@@ -289,6 +313,7 @@ fn import_file(
             if options.novelai_only {
                 result.novelai_count += 1;
             }
+            result.imported_files.push(entry.clone());
             if !options.defer_side_effects {
                 apply_import_side_effects(conn, app_data, &entry, result);
             }
@@ -394,7 +419,13 @@ fn import_image_file(
         metadata_repo::upsert_metadata(conn, &rekey_metadata(meta, &entry.id))?;
     }
 
-    if !options.defer_thumbnails {
+    if options.fast_thumbnails {
+        if let Ok(path) =
+            thumbnailer::generate_thumbnail_fast(conn, app_data, &path_str, &entry.id, 256)
+        {
+            entry.thumbnail_path = Some(path);
+        }
+    } else if !options.defer_thumbnails {
         if let Ok(Some(thumb)) =
             thumbnailer::get_thumbnail_path(conn, app_data, &path_str, &entry.id, 256)
         {

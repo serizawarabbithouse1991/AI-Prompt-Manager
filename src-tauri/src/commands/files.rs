@@ -273,6 +273,18 @@ fn merge_import_result(target: &mut ImportResult, source: &ImportResult) {
     if source.assign_skip_reason.is_some() {
         target.assign_skip_reason = source.assign_skip_reason.clone();
     }
+    target
+        .imported_files
+        .extend(source.imported_files.iter().cloned());
+}
+
+fn emit_library_files_imported(app: &AppHandle, entries: &mut Vec<FileEntry>) {
+    if entries.is_empty() {
+        return;
+    }
+    if let Ok(()) = with_conn(app, |conn| files_repo::attach_db_metadata(conn, entries)) {
+        let _ = app.emit("library-files-imported", entries.clone());
+    }
 }
 
 #[tauri::command]
@@ -367,7 +379,7 @@ pub async fn scan_photo_library_novelai(
                     &app_data,
                     &dest,
                     &staged,
-                    import_service::ImportOptions::bulk(true),
+                    import_service::ImportOptions::photo_bulk(true),
                     |current, batch_total, _message, partial| {
                         let overall_current = processed.saturating_sub(batch_total.saturating_sub(current));
                         let eta = compute_eta_seconds(
@@ -391,6 +403,8 @@ pub async fn scan_photo_library_novelai(
             merge_import_result(&mut result, &batch_result);
             progress_novelai.store(result.novelai_count, Ordering::Relaxed);
             progress_skipped.store(result.skipped_count, Ordering::Relaxed);
+            let mut imported = batch_result.imported_files;
+            emit_library_files_imported(&app_handle, &mut imported);
             Ok(())
         },
     )
