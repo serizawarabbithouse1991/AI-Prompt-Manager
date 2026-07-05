@@ -260,24 +260,43 @@ pub async fn import_paths(
     Ok(result)
 }
 
+fn merge_import_result(target: &mut ImportResult, source: &ImportResult) {
+    target.imported_count += source.imported_count;
+    target.image_count += source.image_count;
+    target.zip_count += source.zip_count;
+    target.error_count += source.error_count;
+    target.skipped_count += source.skipped_count;
+    target.novelai_count += source.novelai_count;
+    target.duplicate_count += source.duplicate_count;
+    target.assigned_collection_count += source.assigned_collection_count;
+    target.tags_added_count += source.tags_added_count;
+    if source.assign_skip_reason.is_some() {
+        target.assign_skip_reason = source.assign_skip_reason.clone();
+    }
+}
+
 #[tauri::command]
 pub async fn scan_photo_library_novelai(
     app: AppHandle,
     incremental: Option<bool>,
     png_only: Option<bool>,
 ) -> Result<ImportResult, String> {
+    use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
     use std::time::Instant;
 
     import_service::reset_photo_scan_cancel();
 
     let incremental = incremental.unwrap_or(true);
     let png_only = png_only.unwrap_or(true);
-    let exclude_ids = if incremental {
+    let (exclude_ids, since_date) = if incremental {
         with_conn(&app, |conn| {
-            crate::db::repositories::photo_scan::list_processed_asset_ids(conn)
+            let ids = crate::db::repositories::photo_scan::list_processed_asset_ids(conn)?;
+            let since =
+                crate::db::repositories::photo_scan::incremental_fetch_since(conn)?;
+            Ok((ids, since))
         })?
     } else {
-        Vec::new()
+        (Vec::new(), None)
     };
 
     let app_handle = app.clone();
@@ -296,83 +315,114 @@ pub async fn scan_photo_library_novelai(
         None,
     );
 
+    let app_data = app_data_dir(&app)?;
+    let dest = ai_library_dir(&app_data);
+    let mut result = ImportResult::default();
     let export_start = Instant::now();
-    let exported = crate::plugins::folder_import::export_photo_library_with_progress(
+    let import_start = Instant::now();
+    let import_processed = AtomicUsize::new(0);
+    let export_total = AtomicUsize::new(0);
+    let progress_novelai = AtomicU32::new(0);
+    let progress_skipped = AtomicU32::new(0);
+
+    let _exported = crate::plugins::folder_import::export_photo_library_with_progress(
         app.clone(),
         exclude_ids,
+        since_date,
         png_only,
         |current, total| {
+            export_total.store(total, Ordering::Relaxed);
             let eta = compute_eta_seconds(current, total, export_start.elapsed().as_secs_f64());
             emit_import_progress(
                 &app_handle,
                 current,
                 total,
                 if png_only {
-                    "PNG を確認・書き出し中"
+                    "PNG を確認・取込中"
                 } else {
-                    "写真を書き出し中"
+                    "写真を確認・取込中"
                 },
                 "export",
-                0,
-                0,
+                progress_novelai.load(Ordering::Relaxed),
+                progress_skipped.load(Ordering::Relaxed),
                 eta,
             );
+        },
+        |batch| {
+            if import_service::is_photo_scan_cancelled() {
+                return Ok(());
+            }
+
+            let staged: Vec<(String, String)> = batch
+                .iter()
+                .map(|item| (item.path.clone(), item.asset_id.clone()))
+                .collect();
+            import_processed.fetch_add(staged.len(), Ordering::Relaxed);
+            let processed = import_processed.load(Ordering::Relaxed);
+            let total_estimate = export_total.load(Ordering::Relaxed).max(processed);
+
+            let batch_result = with_conn(&app, |conn| {
+                import_service::import_staged_photos_with_progress(
+                    conn,
+                    &app_data,
+                    &dest,
+                    &staged,
+                    import_service::ImportOptions::bulk(true),
+                    |current, batch_total, _message, partial| {
+                        let overall_current = processed.saturating_sub(batch_total.saturating_sub(current));
+                        let eta = compute_eta_seconds(
+                            overall_current,
+                            total_estimate,
+                            import_start.elapsed().as_secs_f64(),
+                        );
+                        emit_import_progress(
+                            &app_handle,
+                            overall_current,
+                            total_estimate,
+                            "NovelAI 判別・取込中",
+                            "import",
+                            progress_novelai.load(Ordering::Relaxed) + partial.novelai_count,
+                            progress_skipped.load(Ordering::Relaxed) + partial.skipped_count,
+                            eta,
+                        );
+                    },
+                )
+            })?;
+            merge_import_result(&mut result, &batch_result);
+            progress_novelai.store(result.novelai_count, Ordering::Relaxed);
+            progress_skipped.store(result.skipped_count, Ordering::Relaxed);
+            Ok(())
         },
     )
     .await?;
 
     if import_service::is_photo_scan_cancelled() {
         emit_import_progress(&app, 0, 0, "スキャンを中断しました", "import", 0, 0, None);
-        return Ok(ImportResult::default());
+        return Ok(result);
     }
 
-    if exported.is_empty() {
+    if result.imported_count == 0
+        && result.skipped_count == 0
+        && result.duplicate_count == 0
+        && result.error_count == 0
+    {
         emit_import_progress(&app, 0, 0, "新しい写真はありません", "import", 0, 0, None);
-        return Ok(ImportResult::default());
+        return Ok(result);
     }
 
-    let app_data = app_data_dir(&app)?;
-    let dest = ai_library_dir(&app_data);
-    let total = exported.len();
-    let staged: Vec<(String, String)> = exported
-        .into_iter()
-        .map(|item| (item.path, item.asset_id))
-        .collect();
-
+    let final_total = export_total
+        .load(Ordering::Relaxed)
+        .max(import_processed.load(Ordering::Relaxed));
     emit_import_progress(
         &app,
-        0,
-        total,
-        "NovelAI 判別・取込を開始",
+        final_total,
+        final_total,
+        "取込完了",
         "import",
-        0,
-        0,
+        result.novelai_count,
+        result.skipped_count,
         None,
     );
-
-    let import_start = Instant::now();
-    let result = with_conn(&app, |conn| {
-        import_service::import_staged_photos_with_progress(
-            conn,
-            &app_data,
-            &dest,
-            &staged,
-            import_service::ImportOptions::bulk(true),
-            |current, total, message, partial| {
-                let eta = compute_eta_seconds(current, total, import_start.elapsed().as_secs_f64());
-                emit_import_progress(
-                    &app_handle,
-                    current,
-                    total,
-                    message,
-                    "import",
-                    partial.novelai_count,
-                    partial.skipped_count,
-                    eta,
-                );
-            },
-        )
-    })?;
 
     Ok(result)
 }

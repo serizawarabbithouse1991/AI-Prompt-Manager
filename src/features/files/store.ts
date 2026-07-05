@@ -184,6 +184,7 @@ type FileStore = {
   setImportProgress: (progress: ImportProgress | null) => void;
   setScanning: (scanning: boolean) => void;
   runAutoPhotoScanIfEnabled: () => Promise<void>;
+  refreshAiLibraryQuiet: () => Promise<void>;
   refresh: () => Promise<void>;
   setMetadata: (metadata: AIGenerationMetadata | null) => void;
   setTags: (tags: Tag[]) => void;
@@ -369,6 +370,26 @@ export const useFileStore = create<FileStore>((set, get) => ({
       set({ photoScanRunning: false, scanning: false, importProgress: null });
     }
   },
+
+  refreshAiLibraryQuiet: async () => {
+    const { viewMode, selectedFileId, metadata, tags, inspectorOpen } = get();
+    if (viewMode !== "ai-library") return;
+    try {
+      const files = await listAiLibrary();
+      const selectedFile = findFile(files, selectedFileId);
+      set({
+        files,
+        selectedFileId: selectedFile ? selectedFileId : null,
+        selectedFile,
+        metadata: selectedFile ? metadata : null,
+        tags: selectedFile ? tags : [],
+        inspectorOpen: selectedFile ? inspectorOpen : false,
+      });
+    } catch {
+      // バックグラウンドスキャン中の一時エラーは無視
+    }
+  },
+
   setMetadata: (metadata) => set({ metadata }),
   setTags: (tags) => set({ tags }),
   setAllTags: (tags) => set({ allTags: tags }),

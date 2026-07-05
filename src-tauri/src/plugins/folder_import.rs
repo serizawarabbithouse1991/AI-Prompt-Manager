@@ -5,7 +5,7 @@ use tauri::{
 };
 
 #[cfg(target_os = "ios")]
-const PHOTO_LIBRARY_BATCH_SIZE: u32 = 8;
+const PHOTO_LIBRARY_BATCH_SIZE: u32 = 24;
 
 #[cfg(target_os = "ios")]
 tauri::ios_plugin_binding!(init_plugin_folder_import);
@@ -38,6 +38,7 @@ struct BeginPhotoLibraryScanArgs {
     exclude_local_identifiers: Vec<String>,
     png_only: bool,
     novelai_probe: bool,
+    since_date: Option<String>,
 }
 
 #[cfg(target_os = "ios")]
@@ -117,15 +118,18 @@ pub struct ExportedPhoto {
 }
 
 #[cfg(target_os = "ios")]
-pub async fn export_photo_library_with_progress<R, F>(
+pub async fn export_photo_library_with_progress<R, F, B>(
     app: AppHandle<R>,
     exclude_local_identifiers: Vec<String>,
+    since_date: Option<String>,
     png_only: bool,
     mut on_progress: F,
+    mut on_batch: B,
 ) -> Result<Vec<ExportedPhoto>, String>
 where
     R: Runtime,
     F: FnMut(usize, usize),
+    B: FnMut(&[ExportedPhoto]) -> Result<(), String>,
 {
     use tauri::Manager;
 
@@ -139,6 +143,7 @@ where
                 exclude_local_identifiers,
                 png_only,
                 novelai_probe: png_only,
+                since_date,
             },
         )
         .map_err(|e| e.to_string())?;
@@ -174,14 +179,28 @@ where
             )
             .map_err(|e| e.to_string())?;
 
-        for item in batch.items.unwrap_or_default() {
-            if !item.path.is_empty() {
-                all_items.push(ExportedPhoto {
+        let raw_items = batch.items.unwrap_or_default();
+        let batch_all: Vec<ExportedPhoto> = raw_items
+            .iter()
+            .map(|item| ExportedPhoto {
+                path: item.path.clone(),
+                asset_id: item.asset_id.clone(),
+            })
+            .collect();
+
+        if !batch_all.is_empty() {
+            on_batch(&batch_all)?;
+        }
+
+        all_items.extend(
+            raw_items
+                .into_iter()
+                .filter(|item| !item.path.is_empty())
+                .map(|item| ExportedPhoto {
                     path: item.path,
                     asset_id: item.asset_id,
-                });
-            }
-        }
+                }),
+        );
 
         offset += PHOTO_LIBRARY_BATCH_SIZE;
         let current = std::cmp::min(offset as usize, total);
@@ -212,19 +231,30 @@ pub async fn export_photo_library<R: Runtime>(
     app: AppHandle<R>,
     exclude_local_identifiers: Vec<String>,
 ) -> Result<Vec<ExportedPhoto>, String> {
-    export_photo_library_with_progress(app, exclude_local_identifiers, true, |_, _| {}).await
+    export_photo_library_with_progress(
+        app,
+        exclude_local_identifiers,
+        None,
+        true,
+        |_, _| {},
+        |_| Ok(()),
+    )
+    .await
 }
 
 #[cfg(not(target_os = "ios"))]
-pub async fn export_photo_library_with_progress<R, F>(
+pub async fn export_photo_library_with_progress<R, F, B>(
     _app: AppHandle<R>,
     _exclude_local_identifiers: Vec<String>,
+    _since_date: Option<String>,
     _png_only: bool,
     _on_progress: F,
+    _on_batch: B,
 ) -> Result<Vec<ExportedPhoto>, String>
 where
     R: Runtime,
     F: FnMut(usize, usize),
+    B: FnMut(&[ExportedPhoto]) -> Result<(), String>,
 {
     Err("Photo library scan is only supported on iOS".to_string())
 }

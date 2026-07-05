@@ -5,7 +5,7 @@ import Tauri
 import UIKit
 import UniformTypeIdentifiers
 
-private let photoLibraryExportConcurrency = 4
+private let photoLibraryExportConcurrency = 6
 
 @available(iOS 14.0, *)
 private class ImportPickerDelegate: NSObject, UIDocumentPickerDelegate {
@@ -352,6 +352,7 @@ class FolderImportPlugin: Plugin {
     let excludeLocalIdentifiers: [String]?
     let pngOnly: Bool?
     let novelaiProbe: Bool?
+    let sinceDate: String?
   }
 
   private static let importContentTypes: [UTType] = [
@@ -409,6 +410,16 @@ class FolderImportPlugin: Plugin {
 
       let fetchOptions = PHFetchOptions()
       fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+      if let sinceDateStr = args.sinceDate {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let sinceDate =
+          formatter.date(from: sinceDateStr)
+          ?? ISO8601DateFormatter().date(from: sinceDateStr)
+        if let sinceDate = sinceDate {
+          fetchOptions.predicate = NSPredicate(format: "creationDate >= %@", sinceDate as NSDate)
+        }
+      }
       let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
       let excludeSet = Set(args.excludeLocalIdentifiers ?? [])
       let pngOnly = args.pngOnly ?? false
