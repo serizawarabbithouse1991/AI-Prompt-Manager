@@ -9,6 +9,9 @@ VERSION="$(node -p "require('./package.json').version")"
 IPA_SRC="src-tauri/gen/apple/build/arm64/AI File Manager.ipa"
 IPA_DST="release/ios/AI-File-Manager-${VERSION}.ipa"
 
+echo "==> Sync Privacy Manifest"
+cp src-tauri/ios/PrivacyInfo.xcprivacy src-tauri/gen/apple/ai-file-manager_iOS/PrivacyInfo.xcprivacy
+
 echo "==> Frontend build"
 npm run build
 

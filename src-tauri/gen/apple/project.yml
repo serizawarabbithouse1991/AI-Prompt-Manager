@@ -32,6 +32,8 @@ targets:
       - path: Assets.xcassets
       - path: Externals
       - path: ai-file-manager_iOS
+      - path: ai-file-manager_iOS/PrivacyInfo.xcprivacy
+        buildPhase: resources
       - path: assets
         buildPhase: resources
         type: folder
@@ -53,6 +55,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: 0.1.0
         CFBundleVersion: "0.1.0"
+        NSPhotoLibraryUsageDescription: AI生成画像をアプリのライブラリに取り込み、プロンプトやタグで整理するために写真へのアクセスが必要です。選択した写真のコピーのみを端末内に保存し、外部へ送信しません。
     entitlements:
       path: ai-file-manager_iOS/ai-file-manager_iOS.entitlements
     scheme:

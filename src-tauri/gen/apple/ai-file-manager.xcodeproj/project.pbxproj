@@ -20,6 +20,7 @@
 		BC69D395CCC980D1D9CB618E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F11501BC1D14F876BA22859C /* MetalKit.framework */; };
 		CB56CDDF0AC3EA63C3040716 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 70473567770B108213A920E8 /* QuartzCore.framework */; };
 		D3F65386CF066F440D43DB53 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = DBA3A229E2C460B33F7E1A1F /* LaunchScreen.storyboard */; };
+		E7F8A9B0C1D2E3F405162738 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E7F8A9B0C1D2E3F405162739 /* PrivacyInfo.xcprivacy */; };
 		DF5CCBBFE07F5E60CD6CE702 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = D1D4B016CC03FEB61DF40448 /* main.mm */; };
 /* End PBXBuildFile section */
 
@@ -67,6 +68,7 @@
 		D1D4B016CC03FEB61DF40448 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		DB61FD009B9293C473034503 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
 		DBA3A229E2C460B33F7E1A1F /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		E7F8A9B0C1D2E3F405162739 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E263FEE7A5E4E84FA895CB2B /* connection.rs */ = {isa = PBXFileReference; path = connection.rs; sourceTree = "<group>"; };
 		E35DEE61C89666A9AB5E18E7 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
 		E3C06A55E0131506DBA9544D /* metadata.rs */ = {isa = PBXFileReference; path = metadata.rs; sourceTree = "<group>"; };
@@ -161,6 +163,7 @@
 			children = (
 				B845F8DAD75E9B6C3E62E9D7 /* ai-file-manager_iOS.entitlements */,
 				2413B2F0906931F16E2B6860 /* Info.plist */,
+				E7F8A9B0C1D2E3F405162739 /* PrivacyInfo.xcprivacy */,
 			);
 			path = "ai-file-manager_iOS";
 			sourceTree = "<group>";
@@ -356,6 +359,7 @@
 			files = (
 				A9FE11F352B12C82EB3D2720 /* Assets.xcassets in Resources */,
 				D3F65386CF066F440D43DB53 /* LaunchScreen.storyboard in Resources */,
+				E7F8A9B0C1D2E3F405162738 /* PrivacyInfo.xcprivacy in Resources */,
 				2F99AC4481B00ACC9112B5FB /* assets in Resources */,
 				996F4B633D6F320EB66611B2 /* libapp.a in Resources */,
 			);

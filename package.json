@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "ios:altstore-ipa": "bash scripts/build-ios-altstore.sh",
+    "ios:testflight": "bash scripts/build-ios-testflight.sh",
     "ios:altstore-source": "node scripts/generate-altstore-source.mjs"
   },
   "dependencies": {

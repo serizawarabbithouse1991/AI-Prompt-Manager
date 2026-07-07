@@ -41,7 +41,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>NovelAI 画像の自動検出と AI Library への取り込みのため、写真ライブラリへのアクセスが必要です。</string>
+	<string>AI生成画像をアプリのライブラリに取り込み、プロンプトやタグで整理するために写真へのアクセスが必要です。選択した写真のコピーのみを端末内に保存し、外部へ送信しません。</string>
 	<key>UISupportsDocumentBrowser</key>
 	<true/>
 </dict>

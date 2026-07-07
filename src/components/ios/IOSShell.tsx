@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ScanProgressBanner } from "@/components/layout/ScanProgressBanner";
 import { StorageBanner } from "@/components/layout/StorageBanner";
 import { Inspector } from "@/components/layout/Inspector";
@@ -12,10 +13,13 @@ import { IOSToolbar } from "@/components/ios/IOSToolbar";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useFileStore } from "@/features/files/store";
 import { useKeyboardShortcuts } from "@/features/files/useKeyboardShortcuts";
+import { IOSOnboarding } from "@/components/ios/IOSOnboarding";
+import { isOnboardingComplete } from "@/lib/onboardingPrefs";
 
 export function IOSShell() {
   const viewMode = useFileStore((s) => s.viewMode);
   const selectionMode = useFileStore((s) => s.selectionMode);
+  const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingComplete());
   useKeyboardShortcuts();
 
   function renderTab() {
@@ -35,6 +39,7 @@ export function IOSShell() {
 
   return (
     <div className="app-shell ios-shell flex flex-col bg-[var(--ios-bg)] text-neutral-100">
+      {showOnboarding && <IOSOnboarding onComplete={() => setShowOnboarding(false)} />}
       <ScanProgressBanner />
       <StorageBanner />
       {selectionMode && <IOSToolbar />}
