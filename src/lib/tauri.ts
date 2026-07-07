@@ -325,6 +325,13 @@ export async function addFileToCollection(collectionId: string, fileId: string):
   return invoke("add_file_to_collection", { collectionId, fileId });
 }
 
+export async function batchAddToCollection(
+  collectionId: string,
+  fileIds: string[],
+): Promise<number> {
+  return invoke<number>("batch_add_to_collection", { collectionId, fileIds });
+}
+
 export async function removeFileFromCollection(collectionId: string, fileId: string): Promise<void> {
   return invoke("remove_file_from_collection", { collectionId, fileId });
 }

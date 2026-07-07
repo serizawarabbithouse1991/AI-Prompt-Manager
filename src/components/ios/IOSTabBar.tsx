@@ -11,6 +11,7 @@ const TABS: { id: string; label: string; mode: ViewMode; Icon: typeof IconLibrar
 
 export function IOSTabBar() {
   const viewMode = useFileStore((s) => s.viewMode);
+  const selectionMode = useFileStore((s) => s.selectionMode);
   const setViewMode = useFileStore((s) => s.setViewMode);
   const setSelectedCollectionId = useFileStore((s) => s.setSelectedCollectionId);
   const setInspectorOpen = useFileStore((s) => s.setInspectorOpen);
@@ -25,8 +26,12 @@ export function IOSTabBar() {
 
   return (
     <nav
-      className="ios-tab-bar fixed inset-x-0 bottom-0 z-[55] flex border-t border-[var(--ios-separator)] bg-[var(--ios-bg-elevated)]/90 backdrop-blur-xl"
+      className={[
+        "ios-tab-bar fixed inset-x-0 bottom-0 z-[55] flex border-t border-[var(--ios-separator)] bg-[var(--ios-bg-elevated)]/90 backdrop-blur-xl transition-opacity",
+        selectionMode ? "pointer-events-none opacity-40" : "",
+      ].join(" ")}
       style={{ paddingBottom: "var(--safe-bottom)" }}
+      aria-hidden={selectionMode}
     >
       {TABS.map((tab) => {
         const active =

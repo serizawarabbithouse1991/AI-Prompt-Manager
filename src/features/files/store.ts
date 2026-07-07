@@ -175,6 +175,9 @@ type FileStore = {
   toggleFileSelection: (fileId: string) => void;
   clearSelection: () => void;
   enterSelectionMode: (fileId: string) => void;
+  startSelectionMode: () => void;
+  selectAllDisplayedFiles: () => void;
+  deselectAllFiles: () => void;
   exitSelectionMode: () => void;
   setViewMode: (mode: ViewMode) => Promise<void>;
   runSearch: (query: string) => Promise<void>;
@@ -593,7 +596,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
       const selectedFile = findFile(state.files, primaryId);
       return {
         selectedFileIds: ids,
-        selectionMode: ids.length > 0,
+        selectionMode: state.selectionMode || ids.length > 0,
         selectedFileId: primaryId,
         selectedFile,
         inspectorOpen: ids.length === 1,
@@ -622,6 +625,43 @@ export const useFileStore = create<FileStore>((set, get) => ({
       selectionMode: true,
       selectedFileId: fileId,
       selectedFile: file,
+      inspectorOpen: false,
+      metadata: null,
+      tags: [],
+    });
+  },
+
+  startSelectionMode: () => {
+    set({
+      selectedFileIds: [],
+      selectionMode: true,
+      selectedFileId: null,
+      selectedFile: null,
+      inspectorOpen: false,
+      metadata: null,
+      tags: [],
+      lightboxFileId: null,
+    });
+  },
+
+  selectAllDisplayedFiles: () => {
+    const { files, sortField, sortOrder, fileFilter, filterTagId } = get();
+    const displayed = getDisplayFiles(files, sortField, sortOrder, fileFilter, filterTagId);
+    const ids = displayed.filter((f) => !f.isDirectory).map((f) => f.id);
+    set({
+      selectedFileIds: ids,
+      selectionMode: true,
+      selectedFileId: ids[0] ?? null,
+      selectedFile: ids[0] ? findFile(files, ids[0]) : null,
+      inspectorOpen: false,
+    });
+  },
+
+  deselectAllFiles: () => {
+    set({
+      selectedFileIds: [],
+      selectedFileId: null,
+      selectedFile: null,
       inspectorOpen: false,
       metadata: null,
       tags: [],

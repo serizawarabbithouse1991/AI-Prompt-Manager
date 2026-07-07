@@ -1,0 +1,9 @@
+{
+  "repo": "serizawarabbithouse1991/AI-Prompt-Manager",
+  "bundleIdentifier": "com.ryotaro.ai-file-manager",
+  "appName": "AI File Manager",
+  "developerName": "ryotaro",
+  "subtitle": "AI image metadata & prompt manager",
+  "tintColor": "5856D6",
+  "iconPath": "src-tauri/icons/128x128@2x.png"
+}

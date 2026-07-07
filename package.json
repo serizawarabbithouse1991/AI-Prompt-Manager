@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "ios:altstore-ipa": "bash scripts/build-ios-altstore.sh",
+    "ios:altstore-source": "node scripts/generate-altstore-source.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

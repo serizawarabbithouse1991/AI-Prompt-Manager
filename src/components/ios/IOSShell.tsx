@@ -2,6 +2,7 @@ import { ScanProgressBanner } from "@/components/layout/ScanProgressBanner";
 import { StorageBanner } from "@/components/layout/StorageBanner";
 import { Inspector } from "@/components/layout/Inspector";
 import { IOSActionSheet } from "@/components/ios/IOSActionSheet";
+import { IOSFileQuickActionSheet } from "@/components/ios/IOSFileQuickActionSheet";
 import { IOSCollectionsView } from "@/components/ios/IOSCollectionsView";
 import { IOSFavoritesView } from "@/components/ios/IOSFavoritesView";
 import { IOSLibraryView } from "@/components/ios/IOSLibraryView";
@@ -40,7 +41,7 @@ export function IOSShell() {
       <main
         className={[
           "ios-main min-h-0 flex-1 overflow-hidden",
-          selectionMode ? "pt-[calc(var(--safe-top)+5.5rem)]" : "",
+          selectionMode ? "pt-[calc(var(--safe-top)+7.5rem)]" : "",
         ].join(" ")}
         style={{ paddingBottom: "calc(var(--ios-tab-bar-height) + var(--safe-bottom))" }}
       >
@@ -50,6 +51,7 @@ export function IOSShell() {
       <Inspector />
       <ToastContainer />
       <IOSActionSheet />
+      <IOSFileQuickActionSheet />
     </div>
   );
 }

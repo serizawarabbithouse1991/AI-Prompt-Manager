@@ -28,6 +28,8 @@ dist-ssr
 *.exe
 *.dmg
 *.app/
+*.ipa
+src-tauri/gen/apple/build/
 
 # Tauri generated caches
 **/.tauri/

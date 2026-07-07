@@ -4,12 +4,28 @@ import { VirtuosoGrid } from "react-virtuoso";
 import { useFileStore, useDisplayFiles } from "@/features/files/store";
 import { formatBytes, formatDate } from "@/lib/format";
 import { isMobilePlatform } from "@/lib/platform";
+import { useIOSFileQuickAction } from "@/lib/iosFileQuickAction";
 import { showFileContextMenu } from "@/components/file/FileContextMenu";
 import { EmptyState } from "@/components/file/EmptyState";
 import { GridSkeleton } from "@/components/file/GridSkeleton";
 import { IconCheck, IconFolder, IconImage, IconStar } from "@/components/ui/Icons";
 import { useGridPinchZoom } from "@/hooks/useGridPinchZoom";
-import type { FileEntry } from "@/features/files/types";
+import type { FileEntry, ViewMode } from "@/features/files/types";
+
+function emptyStateForView(viewMode: ViewMode) {
+  const message =
+    viewMode === "search"
+      ? "検索結果がありません"
+      : viewMode === "favorites"
+        ? "お気に入りがありません"
+        : viewMode === "collections"
+          ? "このコレクションは空です"
+          : viewMode === "duplicates"
+            ? "重複ファイルはありません"
+            : "ファイルがありません";
+  const showCta = viewMode === "ai-library" || viewMode === "collections";
+  return { message, showCta };
+}
 
 function useLongPress(onLongPress: () => void) {
   const timerRef = useRef<number | null>(null);
@@ -251,6 +267,7 @@ export function FileGrid() {
   const loadMoreSearch = useFileStore((s) => s.loadMoreSearch);
   const { isMobile, isSelected, handleClick, handleOpen, handleContextMenu, enterSelectionMode, selectionMode } =
     useFileSelection();
+  const openQuickAction = useIOSFileQuickAction((s) => s.openFile);
 
   const containerRef = useRef<HTMLDivElement>(null);
   useGridPinchZoom(containerRef);
@@ -273,7 +290,10 @@ export function FileGrid() {
           onClick={(e) => handleClick(file, file.id, e)}
           onDoubleClick={() => handleOpen(file)}
           onContextMenu={(e) => handleContextMenu(e, file.id)}
-          onLongPress={() => enterSelectionMode(file.id)}
+          onLongPress={() => {
+            if (isMobile) openQuickAction(file);
+            else enterSelectionMode(file.id);
+          }}
         />
       );
     },
@@ -288,6 +308,7 @@ export function FileGrid() {
       handleOpen,
       handleContextMenu,
       enterSelectionMode,
+      openQuickAction,
     ],
   );
 
@@ -298,13 +319,8 @@ export function FileGrid() {
     );
   }
   if (displayFiles.length === 0) {
-    const message =
-      viewMode === "search"
-        ? "検索結果がありません"
-        : viewMode === "duplicates"
-          ? "重複ファイルはありません"
-          : "ファイルがありません";
-    return <EmptyState message={message} showCta={viewMode === "ai-library"} />;
+    const { message, showCta } = emptyStateForView(viewMode);
+    return <EmptyState message={message} showCta={showCta} />;
   }
 
   return (
@@ -341,6 +357,7 @@ export function FileList() {
   const viewMode = useFileStore((s) => s.viewMode);
   const { isMobile, isSelected, handleClick, handleOpen, handleContextMenu, enterSelectionMode } =
     useFileSelection();
+  const openQuickAction = useIOSFileQuickAction((s) => s.openFile);
 
   if (loading && displayFiles.length === 0) return <GridSkeleton />;
   if (error) {
@@ -349,13 +366,8 @@ export function FileList() {
     );
   }
   if (displayFiles.length === 0) {
-    const message =
-      viewMode === "search"
-        ? "検索結果がありません"
-        : viewMode === "duplicates"
-          ? "重複ファイルはありません"
-          : "ファイルがありません";
-    return <EmptyState message={message} showCta={viewMode === "ai-library"} />;
+    const { message, showCta } = emptyStateForView(viewMode);
+    return <EmptyState message={message} showCta={showCta} />;
   }
 
   return (
@@ -375,7 +387,10 @@ export function FileList() {
           onClick={(e) => handleClick(file, file.id, e)}
           onDoubleClick={() => handleOpen(file)}
           onContextMenu={(e) => handleContextMenu(e, file.id)}
-          onLongPress={() => enterSelectionMode(file.id)}
+          onLongPress={() => {
+            if (isMobile) openQuickAction(file);
+            else enterSelectionMode(file.id);
+          }}
         />
       ))}
     </div>

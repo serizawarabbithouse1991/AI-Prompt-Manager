@@ -101,6 +101,16 @@ pub fn list_collection_files(
 }
 
 #[tauri::command]
+pub fn batch_add_to_collection(
+    state: State<'_, DbState>,
+    collection_id: String,
+    file_ids: Vec<String>,
+) -> Result<u32, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    collections_repo::batch_add_files_to_collection(&conn, &collection_id, &file_ids)
+}
+
+#[tauri::command]
 pub fn add_file_to_collection(
     state: State<'_, DbState>,
     collection_id: String,

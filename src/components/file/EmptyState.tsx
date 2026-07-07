@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useFileStore } from "@/features/files/store";
 import { IconImage } from "@/components/ui/Icons";
 
@@ -8,10 +9,12 @@ type EmptyStateProps = {
 
 export function EmptyState({ message, showCta }: EmptyStateProps) {
   const setViewMode = useFileStore((s) => s.setViewMode);
+  const setSelectedCollectionId = useFileStore((s) => s.setSelectedCollectionId);
   const viewMode = useFileStore((s) => s.viewMode);
 
-  const cta =
-    showCta && viewMode === "ai-library" ? (
+  let cta: ReactNode = null;
+  if (showCta && viewMode === "ai-library") {
+    cta = (
       <button
         type="button"
         onClick={() => void setViewMode("settings")}
@@ -19,9 +22,18 @@ export function EmptyState({ message, showCta }: EmptyStateProps) {
       >
         写真を取り込む
       </button>
-    ) : showCta && viewMode === "collections" ? (
-      <p className="mt-2 text-caption text-neutral-500">サイドバーから新しいコレクションを作成できます</p>
-    ) : null;
+    );
+  } else if (showCta && viewMode === "collections") {
+    cta = (
+      <button
+        type="button"
+        onClick={() => setSelectedCollectionId(null)}
+        className="mt-4 action-btn px-4 py-2 text-body"
+      >
+        コレクション一覧へ
+      </button>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col items-center justify-center p-6 text-center animate-fade-in">

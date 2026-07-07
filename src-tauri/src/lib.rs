@@ -56,6 +56,7 @@ pub fn run() {
             commands::collections::delete_collection,
             commands::collections::list_collection_files,
             commands::collections::add_file_to_collection,
+            commands::collections::batch_add_to_collection,
             commands::collections::remove_file_from_collection,
             commands::danbooru::get_danbooru_index_status,
             commands::danbooru::set_danbooru_db_path,

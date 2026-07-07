@@ -215,6 +215,24 @@ pub fn delete_collection(conn: &Connection, collection_id: &str) -> Result<(), S
     Ok(())
 }
 
+pub fn batch_add_files_to_collection(
+    conn: &Connection,
+    collection_id: &str,
+    file_ids: &[String],
+) -> Result<u32, String> {
+    let mut added = 0u32;
+    for file_id in file_ids {
+        let changes = conn
+            .execute(
+                "INSERT OR IGNORE INTO collection_files (collection_id, file_id, sort_order) VALUES (?1,?2,0)",
+                params![collection_id, file_id],
+            )
+            .map_err(|e| e.to_string())?;
+        added += changes as u32;
+    }
+    Ok(added)
+}
+
 pub fn add_file_to_collection(
     conn: &Connection,
     collection_id: &str,

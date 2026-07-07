@@ -1,69 +1,40 @@
 import { useState } from "react";
-import { useFileStore } from "@/features/files/store";
-import {
-  batchAddTag,
-  batchApplyPromptTags,
-  batchRemoveFromLibrary,
-  batchSetFavorite,
-} from "@/lib/tauri";
+import { useFileStore, useDisplayFiles } from "@/features/files/store";
+import { useBatchActions } from "@/features/files/useBatchActions";
 import { confirmAction } from "@/lib/confirm";
-import { toast } from "@/lib/toast";
-import { formatBatchTagApplyResult } from "@/lib/smartAssign";
 import { IconStar } from "@/components/ui/Icons";
 import { IOSSheet } from "@/components/ios/IOSSheet";
+import { TagSearchPicker } from "@/components/search/TagSearchPicker";
+import { IOSListRow } from "@/components/ios/IOSGroupedList";
 
 export function IOSToolbar() {
   const selectedFileIds = useFileStore((s) => s.selectedFileIds);
-  const files = useFileStore((s) => s.files);
-  const allTags = useFileStore((s) => s.allTags);
   const selectionMode = useFileStore((s) => s.selectionMode);
+  const allTags = useFileStore((s) => s.allTags);
+  const collections = useFileStore((s) => s.collections);
   const clearSelection = useFileStore((s) => s.clearSelection);
-  const setBatchProgress = useFileStore((s) => s.setBatchProgress);
-  const refresh = useFileStore((s) => s.refresh);
-  const removeFilesFromList = useFileStore((s) => s.removeFilesFromList);
+  const selectAllDisplayedFiles = useFileStore((s) => s.selectAllDisplayedFiles);
+  const deselectAllFiles = useFileStore((s) => s.deselectAllFiles);
+  const displayFiles = useDisplayFiles();
+
   const [tagSheetOpen, setTagSheetOpen] = useState(false);
+  const [collectionSheetOpen, setCollectionSheetOpen] = useState(false);
 
-  if (!selectionMode || selectedFileIds.length === 0) return null;
+  const {
+    selectedFiles,
+    favorite,
+    addTag,
+    applyPromptTags,
+    removeFromLibrary,
+    addToCollection,
+    shareSelected,
+  } = useBatchActions(selectedFileIds);
 
-  const selectedFiles = files.filter((f) => selectedFileIds.includes(f.id));
+  if (!selectionMode) return null;
 
-  async function runBatch(label: string, action: () => Promise<void>) {
-    setBatchProgress(`${label}中… (${selectedFileIds.length} 件)`);
-    try {
-      await action();
-      setBatchProgress(`${label}完了 (${selectedFileIds.length} 件)`);
-      clearSelection();
-      await refresh();
-    } catch (e) {
-      setBatchProgress(String(e));
-    }
-  }
-
-  async function handleFavorite(isFavorite: boolean) {
-    await runBatch(isFavorite ? "お気に入り追加" : "お気に入り解除", async () => {
-      await batchSetFavorite(
-        selectedFiles.map((f) => ({ fileId: f.id, absolutePath: f.absolutePath })),
-        isFavorite,
-      );
-    });
-  }
-
-  async function handleApplyPromptTags() {
-    await runBatch("プロンプトからタグ付け", async () => {
-      const result = await batchApplyPromptTags(undefined, selectedFileIds);
-      toast(formatBatchTagApplyResult(result), result.skipReason ? "error" : "success");
-    });
-  }
-
-  async function handleAddTag(tagId: string) {
-    setTagSheetOpen(false);
-    await runBatch("タグ付け", async () => {
-      await batchAddTag(
-        selectedFiles.map((f) => ({ fileId: f.id, absolutePath: f.absolutePath })),
-        tagId,
-      );
-    });
-  }
+  const selectableCount = displayFiles.filter((f) => !f.isDirectory).length;
+  const allSelected = selectableCount > 0 && selectedFileIds.length >= selectableCount;
+  const hasSelection = selectedFileIds.length > 0;
 
   async function handleDelete() {
     const ok = await confirmAction({
@@ -73,11 +44,66 @@ export function IOSToolbar() {
       danger: true,
     });
     if (!ok) return;
-    await runBatch("ライブラリから削除", async () => {
-      await batchRemoveFromLibrary(selectedFileIds);
-      removeFilesFromList(selectedFileIds);
-    });
+    await removeFromLibrary();
   }
+
+  function handleSelectAllToggle() {
+    if (allSelected) deselectAllFiles();
+    else selectAllDisplayedFiles();
+  }
+
+  const actions = [
+    {
+      key: "favorite",
+      label: "お気に入り",
+      onClick: () => void favorite(true),
+      disabled: !hasSelection,
+      icon: <IconStar className="h-5 w-5" filled />,
+    },
+    {
+      key: "unfavorite",
+      label: "解除",
+      onClick: () => void favorite(false),
+      disabled: !hasSelection,
+      icon: <IconStar className="h-5 w-5" />,
+    },
+    {
+      key: "tag",
+      label: "タグ",
+      onClick: () => setTagSheetOpen(true),
+      disabled: !hasSelection,
+      icon: <span className="text-lg">#</span>,
+    },
+    {
+      key: "collection",
+      label: "コレクション",
+      onClick: () => setCollectionSheetOpen(true),
+      disabled: !hasSelection,
+      icon: <span className="text-lg">▦</span>,
+    },
+    {
+      key: "share",
+      label: "共有",
+      onClick: () => void shareSelected(),
+      disabled: !hasSelection,
+      icon: <span className="text-lg">↗</span>,
+    },
+    {
+      key: "prompt",
+      label: "タグ付け",
+      onClick: () => void applyPromptTags(),
+      disabled: !hasSelection,
+      icon: <span className="text-lg">✦</span>,
+    },
+    {
+      key: "delete",
+      label: "削除",
+      onClick: () => void handleDelete(),
+      disabled: !hasSelection,
+      icon: <span className="text-lg">🗑</span>,
+      danger: true,
+    },
+  ];
 
   return (
     <>
@@ -89,58 +115,65 @@ export function IOSToolbar() {
           <button type="button" onClick={clearSelection} className="text-base text-blue-400">
             キャンセル
           </button>
-          <span className="text-sm font-medium">{selectedFileIds.length} 件選択</span>
-          <div className="w-16" />
+          <span className="text-sm font-medium">
+            {hasSelection ? `${selectedFileIds.length} 件選択` : "項目を選択"}
+          </span>
+          <button
+            type="button"
+            onClick={handleSelectAllToggle}
+            className="text-base text-blue-400 disabled:opacity-40"
+            disabled={selectableCount === 0}
+          >
+            {allSelected ? "解除" : "すべて"}
+          </button>
         </div>
-        <div className="flex items-center justify-around border-t border-[var(--ios-separator)] px-2 py-2">
-          <button
-            type="button"
-            onClick={() => void handleFavorite(true)}
-            className="flex min-h-[var(--ios-touch-min)] min-w-[var(--ios-touch-min)] flex-col items-center justify-center gap-0.5 text-[10px] text-neutral-300"
-          >
-            <IconStar className="h-5 w-5" filled />
-            お気に入り
-          </button>
-          <button
-            type="button"
-            onClick={() => setTagSheetOpen(true)}
-            className="flex min-h-[var(--ios-touch-min)] min-w-[var(--ios-touch-min)] flex-col items-center justify-center gap-0.5 text-[10px] text-neutral-300"
-          >
-            <span className="text-lg">#</span>
-            タグ
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleApplyPromptTags()}
-            className="flex min-h-[var(--ios-touch-min)] min-w-[var(--ios-touch-min)] flex-col items-center justify-center gap-0.5 text-[10px] text-neutral-300"
-          >
-            <span className="text-lg">✦</span>
-            タグ付け
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleDelete()}
-            className="flex min-h-[var(--ios-touch-min)] min-w-[var(--ios-touch-min)] flex-col items-center justify-center gap-0.5 text-[10px] text-red-400"
-          >
-            <span className="text-lg">🗑</span>
-            削除
-          </button>
+        <div className="flex items-center gap-1 overflow-x-auto border-t border-[var(--ios-separator)] px-2 py-2">
+          {actions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              disabled={action.disabled}
+              onClick={action.onClick}
+              className={[
+                "flex min-h-[var(--ios-touch-min)] min-w-[4.5rem] shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-[10px]",
+                action.danger ? "text-red-400" : "text-neutral-300",
+                action.disabled ? "opacity-40" : "active:bg-neutral-800",
+              ].join(" ")}
+            >
+              {action.icon}
+              {action.label}
+            </button>
+          ))}
         </div>
       </div>
       <IOSSheet open={tagSheetOpen} onClose={() => setTagSheetOpen(false)} title="タグを追加">
-        <div className="p-2">
-          {allTags.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-neutral-500">タグがありません</p>
+        <div className="p-4">
+          <TagSearchPicker
+            allTags={allTags}
+            selectedTagId={null}
+            onSelect={(tagId) => {
+              if (tagId) void addTag(tagId);
+              setTagSheetOpen(false);
+            }}
+            variant="ios"
+            showAllOption={false}
+          />
+        </div>
+      </IOSSheet>
+      <IOSSheet open={collectionSheetOpen} onClose={() => setCollectionSheetOpen(false)} title="コレクションに追加">
+        <div className="overflow-hidden rounded-[var(--ios-radius-md)] bg-[var(--ios-bg-grouped)]">
+          {collections.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-neutral-500">コレクションがありません</p>
           ) : (
-            allTags.map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => void handleAddTag(tag.id)}
-                className="ios-list-row flex w-full items-center border-b border-[var(--ios-separator)] px-4 text-left last:border-b-0"
-              >
-                {tag.name}
-              </button>
+            collections.map((collection) => (
+              <IOSListRow
+                key={collection.id}
+                label={collection.name}
+                onPress={() => {
+                  setCollectionSheetOpen(false);
+                  void addToCollection(collection.id, collection.name);
+                }}
+              />
             ))
           )}
         </div>

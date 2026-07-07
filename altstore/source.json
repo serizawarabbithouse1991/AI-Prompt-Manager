@@ -1,0 +1,21 @@
+{
+  "name": "AI File Manager",
+  "sourceURL": "https://raw.githubusercontent.com/serizawarabbithouse1991/AI-Prompt-Manager/main/altstore/source.json",
+  "apps": [
+    {
+      "name": "AI File Manager",
+      "bundleIdentifier": "com.ryotaro.ai-file-manager",
+      "developerName": "ryotaro",
+      "subtitle": "AI image metadata & prompt manager",
+      "version": "0.1.0",
+      "versionDate": "2026-06-28T07:17:02.597Z",
+      "versionDescription": "AI File Manager 0.1.0",
+      "downloadURL": "https://github.com/serizawarabbithouse1991/AI-Prompt-Manager/releases/download/v0.1.0/AI-File-Manager-0.1.0.ipa",
+      "localizedDescription": "AI 生成画像のメタデータ・プロンプト・タグを管理するファイルマネージャー。AltStore 経由でインストールすると、AltServer と同一 Wi-Fi 上で署名が自動更新されます（無料 Apple ID は約7日ごと）。",
+      "iconURL": "https://raw.githubusercontent.com/serizawarabbithouse1991/AI-Prompt-Manager/main/src-tauri/icons/128x128@2x.png",
+      "tintColor": "5856D6",
+      "size": 24033418
+    }
+  ],
+  "news": []
+}
