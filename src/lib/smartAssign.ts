@@ -1,9 +1,8 @@
 import type { BatchAssignResult, BatchTagApplyResult, ImportResult } from "@/features/files/types";
 
 const SKIP_MESSAGES: Record<string, string> = {
-  cache_not_ready: "辞書が未構築です。設定で danbooru2023.db をインポートし「辞書を更新」してください。",
   no_prompt: "プロンプトが保存されていません。メタデータ未抽出の画像は振り分けできません。",
-  no_character_tags: "プロンプト内に Danbooru キャラクタータグが見つかりませんでした。",
+  no_character_tags: "プロンプト内にキャラクタータグ（character: またはスマートキーワード）が見つかりませんでした。",
 };
 
 export function formatSkipReason(reason?: string | null): string {

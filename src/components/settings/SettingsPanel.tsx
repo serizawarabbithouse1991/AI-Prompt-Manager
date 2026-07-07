@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useFileStore } from "@/features/files/store";
-import type { DanbooruCacheProgress, ImportResult, PromptTagMode, PromptTagSettings } from "@/features/files/types";
+import type { ImportResult, PromptTagMode, PromptTagSettings } from "@/features/files/types";
 import {
   cancelPhotoLibraryScan,
   importFromSaf,
@@ -13,14 +12,10 @@ import {
   reconcileAiLibrary,
   backfillContentHashes,
   backupDatabase,
-  getDanbooruIndexStatus,
-  rebuildDanbooruCharacterCache,
-  importDanbooruDbFile,
   diagnoseSmartAssignment,
   getPromptTagSettings,
   setPromptTagSettings,
   batchApplyPromptTags,
-  type DanbooruIndexStatus,
   type StorageDiagnostics,
 } from "@/lib/tauri";
 import { formatNovelAiImportResult, formatPhotoScanResult, runPhotoLibraryScan } from "@/lib/photoScan";
@@ -76,9 +71,6 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
   const [autoPhotoScan, setAutoPhotoScan] = useState(loadAutoPhotoScanEnabled);
   const [pngOnlyScan, setPngOnlyScan] = useState(true);
   const [storageDiagnostics, setStorageDiagnostics] = useState<StorageDiagnostics | null>(null);
-  const [danbooruStatus, setDanbooruStatus] = useState<DanbooruIndexStatus | null>(null);
-  const [danbooruRebuilding, setDanbooruRebuilding] = useState(false);
-  const [cacheProgress, setCacheProgress] = useState<DanbooruCacheProgress | null>(null);
   const [diagnosisText, setDiagnosisText] = useState<string | null>(null);
   const [promptTagSettings, setPromptTagSettingsState] = useState<PromptTagSettings | null>(null);
   const [batchTagRunning, setBatchTagRunning] = useState(false);
@@ -103,18 +95,7 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
     }
   }
 
-  async function refreshDanbooruStatus() {
-    try {
-      const status = await getDanbooruIndexStatus();
-      setDanbooruStatus(status);
-    } catch (e) {
-      setDanbooruStatus(null);
-      setLastResult(String(e));
-    }
-  }
-
   useEffect(() => {
-    void refreshDanbooruStatus();
     void getPromptTagSettings()
       .then(setPromptTagSettingsState)
       .catch(() =>
@@ -124,12 +105,6 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
           excludeQualityTags: true,
         }),
       );
-    const unlisten = listen<DanbooruCacheProgress>("danbooru-cache-progress", (event) => {
-      setCacheProgress(event.payload);
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
   }, []);
 
   async function handlePromptTagModeChange(mode: PromptTagMode) {
@@ -178,13 +153,6 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
   }
 
   async function handleBatchApplyPromptTags() {
-    const mode = promptTagSettings?.mode ?? "all";
-    if (mode === "character" && danbooruStatus && !danbooruStatus.cacheReady) {
-      const message = formatSkipReason("cache_not_ready");
-      setLastResult(message);
-      toast(message, "error");
-      return;
-    }
     setBatchTagRunning(true);
     try {
       const result = await batchApplyPromptTags(promptTagSettings?.mode);
@@ -206,7 +174,7 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
       const lines = [
         `ファイル: ${d.fileId ?? "—"}`,
         `プロンプト: ${d.hasPrompt ? d.promptPreview ?? "あり" : "なし"}`,
-        `辞書: ${d.cacheReady ? `${d.cacheCount.toLocaleString()} タグ` : "未構築"}`,
+        `スマートキーワード: ${d.cacheCount.toLocaleString()} 件`,
         `マッチ: ${d.matchedCharacterTags.join(", ") || "なし"}`,
       ];
       if (d.skipReason) {
@@ -216,47 +184,6 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
     } catch (e) {
       setLastResult(String(e));
       toast(String(e), "error");
-    }
-  }
-
-  async function handleRebuildDanbooruCache() {
-    setDanbooruRebuilding(true);
-    setCacheProgress({ phase: "opening", count: 0, message: "開始中…" });
-    try {
-      const result = await rebuildDanbooruCharacterCache();
-      await refreshDanbooruStatus();
-      setLastResult(`Danbooru 辞書: ${result.cacheCount.toLocaleString()} キャラタグを読み込みました`);
-      toast(`キャラ辞書を更新しました（${result.cacheCount.toLocaleString()} 件）`, "success");
-    } catch (e) {
-      setLastResult(String(e));
-      toast(String(e), "error");
-    } finally {
-      setDanbooruRebuilding(false);
-      setCacheProgress(null);
-    }
-  }
-
-  async function handleImportDanbooruDb() {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "SQLite DB", extensions: ["db"] }],
-    });
-    const paths = normalizeSelectedPaths(selected);
-    if (paths.length === 0) return;
-
-    setDanbooruRebuilding(true);
-    setCacheProgress({ phase: "opening", count: 0, message: "開始中…" });
-    try {
-      const result = await importDanbooruDbFile(paths[0]);
-      await refreshDanbooruStatus();
-      setLastResult(`Danbooru DB をインポート: ${result.cacheCount.toLocaleString()} キャラタグ`);
-      toast(`辞書をインポートしました（${result.cacheCount.toLocaleString()} 件）`, "success");
-    } catch (e) {
-      setLastResult(String(e));
-      toast(String(e), "error");
-    } finally {
-      setDanbooruRebuilding(false);
-      setCacheProgress(null);
     }
   }
 
@@ -566,37 +493,10 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
           />
         </IOSGroupedList>
 
-        <IOSGroupedList title="キャラクター辞書（Danbooru）">
-          {danbooruStatus && (
-            <IOSListRow
-              label="キャッシュ"
-              value={
-                danbooruStatus.cacheReady
-                  ? `${danbooruStatus.cacheCount.toLocaleString()} タグ`
-                  : "未構築"
-              }
-            />
-          )}
-          <IOSListRow
-            label={danbooruRebuilding ? "辞書を更新中…" : "辞書を更新"}
-            onPress={() => void handleRebuildDanbooruCache()}
-            disabled={danbooruRebuilding}
-          />
-          <IOSListRow
-            label="danbooru2023.db をインポート"
-            onPress={() => void handleImportDanbooruDb()}
-            disabled={danbooruRebuilding}
-          />
-          <IOSListRow label="状態を更新" onPress={() => void refreshDanbooruStatus()} />
+        <IOSGroupedList title="スマート振り分け">
           <IOSListRow label="振り分け診断テスト" onPress={() => void handleDiagnose()} />
         </IOSGroupedList>
 
-        {cacheProgress && (
-          <p className="px-2 text-xs text-neutral-400">
-            {cacheProgress.message}
-            {cacheProgress.count > 0 && ` (${cacheProgress.count.toLocaleString()} 件)`}
-          </p>
-        )}
         {diagnosisText && (
           <pre className="overflow-x-auto rounded-lg bg-neutral-900/50 p-3 text-xs text-neutral-400 whitespace-pre-wrap">
             {diagnosisText}
@@ -746,7 +646,7 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
                 checked={promptTagSettings?.mode === "character"}
                 onChange={() => void handlePromptTagModeChange("character")}
               />
-              キャラクターのみ（Danbooru 辞書が必要）
+              キャラクターのみ（character: タグとスマートキーワード）
             </label>
           </div>
           <label className="flex items-center gap-2 text-xs text-neutral-400">
@@ -779,78 +679,13 @@ export function SettingsPanel({ variant = "default" }: { variant?: "default" | "
         </section>
 
         <section className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
-          <h2 className="text-sm font-medium">キャラクター辞書（Danbooru）</h2>
+          <h2 className="text-sm font-medium">スマート振り分け</h2>
           <p className="text-xs text-neutral-500">
-            danbooru2023.db からキャラクタータグを読み込み、プロンプトに含まれるキャラごとにコレクションへ自動振り分けします。
-            {isDesktop
-              ? " デフォルトは iCloud の NovelAI フォルダ内の danbooru2023.db です。"
-              : " iOS では DB ファイルをアプリへインポートしてください。"}
+            プロンプトの character: タグとスマートコレクションのキーワードでコレクションへ自動振り分けします。
           </p>
-          {danbooruStatus && !danbooruStatus.cacheReady && (
-            <p className="rounded border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">
-              辞書が未構築です。DB をインポート（または検出）後、「辞書を更新」を実行してください。更新完了までスマート振り分けは動作しません。
-            </p>
-          )}
-          {cacheProgress && (
-            <div className="space-y-1">
-              <p className="text-xs text-neutral-400">{cacheProgress.message}</p>
-              {cacheProgress.count > 0 && (
-                <p className="text-xs text-neutral-500">{cacheProgress.count.toLocaleString()} 件処理済み</p>
-              )}
-            </div>
-          )}
-          {danbooruStatus ? (
-            <dl className="space-y-1 text-xs text-neutral-400">
-              <div className="flex justify-between gap-4">
-                <dt>DB</dt>
-                <dd className="max-w-[60%] truncate text-right">
-                  {danbooruStatus.dbExists ? danbooruStatus.dbPath ?? "検出済み" : "未検出"}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt>キャッシュ</dt>
-                <dd>
-                  {danbooruStatus.cacheReady
-                    ? `${danbooruStatus.cacheCount.toLocaleString()} タグ`
-                    : "未構築"}
-                </dd>
-              </div>
-              {danbooruStatus.cacheBuiltAt && (
-                <div className="flex justify-between gap-4">
-                  <dt>最終更新</dt>
-                  <dd>{new Date(danbooruStatus.cacheBuiltAt).toLocaleString()}</dd>
-                </div>
-              )}
-            </dl>
-          ) : (
-            <p className="text-xs text-neutral-500">読み込み中…</p>
-          )}
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              disabled={danbooruRebuilding}
-              onClick={() => void handleRebuildDanbooruCache()}
-              className="action-btn disabled:opacity-50"
-            >
-              {danbooruRebuilding ? "辞書を更新中…" : "辞書を更新"}
-            </button>
-            {(isIOS || isAndroid) && (
-              <button
-                type="button"
-                disabled={danbooruRebuilding}
-                onClick={() => void handleImportDanbooruDb()}
-                className="action-btn disabled:opacity-50"
-              >
-                danbooru2023.db をインポート
-              </button>
-            )}
-            <button type="button" onClick={() => void refreshDanbooruStatus()} className="action-btn">
-              状態を更新
-            </button>
-            <button type="button" onClick={() => void handleDiagnose()} className="action-btn">
-              振り分け診断テスト
-            </button>
-          </div>
+          <button type="button" onClick={() => void handleDiagnose()} className="action-btn">
+            振り分け診断テスト
+          </button>
           {diagnosisText && (
             <pre className="overflow-x-auto rounded border border-neutral-800 bg-neutral-950 p-2 text-xs text-neutral-400 whitespace-pre-wrap">
               {diagnosisText}

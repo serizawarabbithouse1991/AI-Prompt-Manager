@@ -1,14 +1,12 @@
 use rusqlite::{params, Connection};
 
+use crate::db::repositories::app_settings::{get_setting, set_setting};
 use crate::db::repositories::tags as tags_repo;
 use crate::models::prompt_tag::{BatchTagApplyResult, PromptTagSettings, TagApplyResult};
 use crate::services::character_matcher::{
     filter_quality_tags, is_quality_tag, normalize_tag, tokenize_prompt, SKIP_NO_PROMPT,
 };
-use crate::services::danbooru_index::{
-    find_characters_in_prompt, get_setting, is_cache_ready, set_setting,
-    SKIP_CACHE_NOT_READY,
-};
+use crate::services::prompt_character_tags::find_characters_in_prompt;
 
 pub const SETTING_PROMPT_TAG_MODE: &str = "prompt_tag_mode";
 pub const SETTING_AUTO_TAG_ON_IMPORT: &str = "auto_tag_on_import";
@@ -103,9 +101,6 @@ pub fn resolve_tags(
             }
         }
         PromptTagMode::Character => {
-            if !is_cache_ready(conn)? {
-                return Err(SKIP_CACHE_NOT_READY.to_string());
-            }
             let tokens = tokenize_prompt(prompt);
             find_characters_in_prompt(conn, prompt, &tokens)
         }
@@ -157,16 +152,7 @@ pub fn apply_prompt_tags_for_file(
         0
     };
 
-    let tag_names = match resolve_tags(conn, &prompt, mode, exclude_quality) {
-        Ok(names) => names,
-        Err(reason) if reason == SKIP_CACHE_NOT_READY => {
-            return Ok(TagApplyResult {
-                skip_reason: Some(SKIP_CACHE_NOT_READY.to_string()),
-                ..TagApplyResult::default()
-            });
-        }
-        Err(e) => return Err(e),
-    };
+    let tag_names = resolve_tags(conn, &prompt, mode, exclude_quality)?;
 
     if tag_names.is_empty() {
         return Ok(TagApplyResult::default());
@@ -187,13 +173,6 @@ pub fn batch_apply_prompt_tags(
     mode: PromptTagMode,
     file_ids: Option<&[String]>,
 ) -> Result<BatchTagApplyResult, String> {
-    if mode == PromptTagMode::Character && !is_cache_ready(conn)? {
-        return Ok(BatchTagApplyResult {
-            skip_reason: Some(SKIP_CACHE_NOT_READY.to_string()),
-            ..BatchTagApplyResult::default()
-        });
-    }
-
     let rows: Vec<(String, String, Option<String>)> = if let Some(ids) = file_ids {
         if ids.is_empty() {
             return Ok(BatchTagApplyResult::default());
@@ -321,15 +300,21 @@ mod tests {
               file_id TEXT PRIMARY KEY,
               positive_prompt TEXT
             );
-            CREATE TABLE danbooru_character_tags (
-              name TEXT PRIMARY KEY,
-              normalized TEXT NOT NULL UNIQUE
-            );
             CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);
+            CREATE TABLE collections (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT,
+              kind TEXT DEFAULT 'manual',
+              created_at TEXT,
+              match_keywords TEXT
+            );
             INSERT INTO files (id, absolute_path, display_name, file_kind)
             VALUES ('f1', '/tmp/test.png', 'test.png', 'image');
             INSERT INTO ai_generation_metadata (file_id, positive_prompt)
-            VALUES ('f1', '1girl, hatsune miku, masterpiece');
+            VALUES ('f1', 'character:hatsune miku, 1girl, masterpiece');
+            INSERT INTO collections (id, name, kind, created_at, match_keywords)
+            VALUES ('c1', 'Miku', 'smart_character', 'now', '["hatsune miku"]');
             "#,
         )
         .unwrap();

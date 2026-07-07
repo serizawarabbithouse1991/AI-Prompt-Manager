@@ -113,15 +113,13 @@ CREATE TABLE IF NOT EXISTS character_suggestions (
   last_seen_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS danbooru_character_tags (
-  name TEXT PRIMARY KEY,
-  normalized TEXT NOT NULL UNIQUE
-);
-
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+DROP TABLE IF EXISTS danbooru_character_tags;
+DELETE FROM app_settings WHERE key IN ('danbooru_db_path', 'danbooru_cache_built_at');
 "#;
 
 fn ensure_collections_match_keywords(conn: &rusqlite::Connection) -> Result<(), String> {

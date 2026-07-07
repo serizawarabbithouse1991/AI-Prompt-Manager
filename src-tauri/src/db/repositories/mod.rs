@@ -1,3 +1,4 @@
+pub mod app_settings;
 pub mod collections;
 pub mod files;
 pub mod fts;

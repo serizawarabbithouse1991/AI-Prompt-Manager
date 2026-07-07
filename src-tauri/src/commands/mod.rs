@@ -1,5 +1,4 @@
 pub mod collections;
-pub mod danbooru;
 pub mod files;
 pub mod maintenance;
 pub mod metadata;

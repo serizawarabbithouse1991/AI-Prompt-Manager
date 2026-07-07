@@ -136,17 +136,12 @@ export type SmartAssignmentDiagnosis = {
   fileId?: string | null;
   hasPrompt: boolean;
   promptPreview?: string | null;
+  /** スマートコレクションに登録されたキーワード数 */
   cacheCount: number;
   cacheReady: boolean;
   tokenizedTags: string[];
   matchedCharacterTags: string[];
   skipReason?: string | null;
-};
-
-export type DanbooruCacheProgress = {
-  phase: string;
-  count: number;
-  message: string;
 };
 
 export type PromptTagMode = "all" | "character";
@@ -169,19 +164,6 @@ export type BatchTagApplyResult = {
   tagsSkipped: number;
   filesWithoutPrompt: number;
   skipReason?: string | null;
-};
-
-export type DanbooruIndexStatus = {
-  dbPath?: string | null;
-  dbExists: boolean;
-  cacheCount: number;
-  cacheBuiltAt?: string | null;
-  cacheReady: boolean;
-};
-
-export type RebuildDanbooruCacheResult = {
-  cacheCount: number;
-  dbPath: string;
 };
 
 export type SearchFilters = {

@@ -6,20 +6,17 @@ import type {
   BatchAssignResult,
   CharacterSuggestion,
   Collection,
-  DanbooruIndexStatus,
   FileEntry,
   ImportProgress,
   ImportResult,
   ScanResult,
   SearchFilters,
   SmartAssignmentDiagnosis,
-  DanbooruCacheProgress,
   PromptTagSettings,
   PromptTagMode,
   TagApplyResult,
   BatchTagApplyResult,
   SpecialPaths,
-  RebuildDanbooruCacheResult,
 } from "@/features/files/types";
 
 export type FileRef = {
@@ -297,22 +294,6 @@ export async function dismissCharacterSuggestion(tag: string): Promise<void> {
   return invoke("dismiss_character_suggestion", { tag });
 }
 
-export async function getDanbooruIndexStatus(): Promise<DanbooruIndexStatus> {
-  return invoke<DanbooruIndexStatus>("get_danbooru_index_status");
-}
-
-export async function setDanbooruDbPath(path: string): Promise<void> {
-  return invoke("set_danbooru_db_path", { path });
-}
-
-export async function rebuildDanbooruCharacterCache(): Promise<RebuildDanbooruCacheResult> {
-  return invoke<RebuildDanbooruCacheResult>("rebuild_danbooru_character_cache");
-}
-
-export async function importDanbooruDbFile(sourcePath: string): Promise<RebuildDanbooruCacheResult> {
-  return invoke<RebuildDanbooruCacheResult>("import_danbooru_db_file", { sourcePath });
-}
-
 export async function deleteCollection(collectionId: string): Promise<void> {
   return invoke("delete_collection", { collectionId });
 }
@@ -386,4 +367,4 @@ export async function batchApplyPromptTags(
   });
 }
 
-export type { Collection, SearchFilters, BackfillResult, CharacterSuggestion, BatchAssignResult, DanbooruIndexStatus, RebuildDanbooruCacheResult, SmartAssignmentDiagnosis, DanbooruCacheProgress, PromptTagSettings, PromptTagMode, TagApplyResult, BatchTagApplyResult };
+export type { Collection, SearchFilters, BackfillResult, CharacterSuggestion, BatchAssignResult, SmartAssignmentDiagnosis, PromptTagSettings, PromptTagMode, TagApplyResult, BatchTagApplyResult };

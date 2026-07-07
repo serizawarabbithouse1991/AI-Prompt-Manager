@@ -56,23 +56,6 @@ pub struct AssignResult {
     pub character_tags_matched: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DanbooruIndexStatus {
-    pub db_path: Option<String>,
-    pub db_exists: bool,
-    pub cache_count: u32,
-    pub cache_built_at: Option<String>,
-    pub cache_ready: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RebuildDanbooruCacheResult {
-    pub cache_count: u32,
-    pub db_path: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BatchAssignResult {
@@ -99,12 +82,4 @@ pub struct SmartAssignmentDiagnosis {
     pub matched_character_tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DanbooruCacheProgress {
-    pub phase: String,
-    pub count: u32,
-    pub message: String,
 }

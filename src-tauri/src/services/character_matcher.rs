@@ -5,13 +5,10 @@ use rusqlite::{params, Connection};
 
 use crate::db::repositories::collections::{
     ensure_smart_collection_for_character, ensure_smart_rules_cache,
-    find_smart_collection_for_character, record_character_suggestions,
+    find_smart_collection_for_character, list_smart_collection_rules, record_character_suggestions,
 };
 use crate::models::collection::{AssignResult, BatchAssignResult, SmartAssignmentDiagnosis};
-use crate::services::danbooru_index::{
-    canonical_name_for_tag, character_cache_count, ensure_memory_index, find_characters_in_prompt,
-    is_cache_ready, require_cache_ready, SKIP_CACHE_NOT_READY,
-};
+use crate::services::prompt_character_tags::{canonical_name_for_tag, find_characters_in_prompt};
 
 pub const SKIP_NO_PROMPT: &str = "no_prompt";
 pub const SKIP_NO_CHARACTER_TAGS: &str = "no_character_tags";
@@ -56,7 +53,7 @@ fn strip_brackets_and_weights(raw: &str) -> String {
     s
 }
 
-fn strip_weight_syntax(raw: &str) -> String {
+pub fn strip_weight_syntax(raw: &str) -> String {
     let trimmed = strip_brackets_and_weights(&strip_prefixes(raw));
     if let Some((_, rest)) = trimmed.split_once("::") {
         if let Some((tag, _)) = rest.rsplit_once("::") {
@@ -213,12 +210,19 @@ fn prompt_preview(prompt: &str) -> String {
     }
 }
 
+fn smart_keyword_count(conn: &Connection) -> Result<u32, String> {
+    let rules = list_smart_collection_rules(conn)?;
+    Ok(rules
+        .iter()
+        .map(|rule| rule.match_keywords.len())
+        .sum::<usize>() as u32)
+}
+
 pub fn diagnose_smart_assignment(
     conn: &Connection,
     file_id: Option<&str>,
 ) -> Result<SmartAssignmentDiagnosis, String> {
-    let cache_count = character_cache_count(conn)?;
-    let cache_ready = cache_count > 0;
+    let keyword_count = smart_keyword_count(conn)?;
 
     let resolved_file_id = if let Some(id) = file_id {
         id.to_string()
@@ -250,29 +254,15 @@ pub fn diagnose_smart_assignment(
             file_id: Some(resolved_file_id),
             has_prompt: false,
             prompt_preview: None,
-            cache_count,
-            cache_ready,
+            cache_count: keyword_count,
+            cache_ready: true,
             tokenized_tags: Vec::new(),
             matched_character_tags: Vec::new(),
             skip_reason: Some(SKIP_NO_PROMPT.to_string()),
         });
     };
 
-    if !cache_ready {
-        return Ok(SmartAssignmentDiagnosis {
-            file_id: Some(resolved_file_id),
-            has_prompt: true,
-            prompt_preview: Some(prompt_preview(&prompt)),
-            cache_count,
-            cache_ready: false,
-            tokenized_tags: tokenize_prompt(&prompt),
-            matched_character_tags: Vec::new(),
-            skip_reason: Some(SKIP_CACHE_NOT_READY.to_string()),
-        });
-    }
-
     let tags = tokenize_prompt(&prompt);
-    ensure_memory_index(conn)?;
     ensure_smart_rules_cache(conn)?;
     let char_tags = find_characters_in_prompt(conn, &prompt, &tags)?;
     let skip_reason = if char_tags.is_empty() {
@@ -285,8 +275,8 @@ pub fn diagnose_smart_assignment(
         file_id: Some(resolved_file_id),
         has_prompt: true,
         prompt_preview: Some(prompt_preview(&prompt)),
-        cache_count,
-        cache_ready,
+        cache_count: keyword_count,
+        cache_ready: true,
         tokenized_tags: tags,
         matched_character_tags: char_tags,
         skip_reason,
@@ -313,19 +303,7 @@ pub fn assign_smart_collections_for_file(
         });
     };
 
-    let cache_count = match require_cache_ready(conn) {
-        Ok(count) => count,
-        Err(_) => {
-            return Ok(AssignResult {
-                skip_reason: Some(SKIP_CACHE_NOT_READY.to_string()),
-                cache_ready: false,
-                ..AssignResult::default()
-            });
-        }
-    };
-
     let tags = tokenize_prompt(&prompt);
-    ensure_memory_index(conn)?;
     ensure_smart_rules_cache(conn)?;
     let char_tags = find_characters_in_prompt(conn, &prompt, &tags)?;
     if char_tags.is_empty() {
@@ -355,7 +333,7 @@ pub fn assign_smart_collections_for_file(
     Ok(AssignResult {
         assigned_count,
         collection_ids,
-        cache_ready: cache_count > 0,
+        cache_ready: true,
         character_tags_matched: char_tags.len() as u32,
         skip_reason: None,
     })
@@ -365,14 +343,6 @@ pub fn batch_assign_smart_collections(
     conn: &Connection,
     _app_data: &Path,
 ) -> Result<BatchAssignResult, String> {
-    if !is_cache_ready(conn)? {
-        return Ok(BatchAssignResult {
-            skip_reason: Some(SKIP_CACHE_NOT_READY.to_string()),
-            ..BatchAssignResult::default()
-        });
-    }
-
-    ensure_memory_index(conn)?;
     ensure_smart_rules_cache(conn)?;
 
     let total_files: u32 = conn

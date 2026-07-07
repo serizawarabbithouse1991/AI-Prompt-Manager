@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFileStore } from "@/features/files/store";
-import type { CharacterSuggestion, Collection, DanbooruIndexStatus } from "@/features/files/types";
+import type { CharacterSuggestion, Collection } from "@/features/files/types";
 import {
   batchAssignSmartCollections,
   createCollection,
@@ -8,7 +8,6 @@ import {
   deleteCollection,
   dismissCharacterSuggestion,
   diagnoseSmartAssignment,
-  getDanbooruIndexStatus,
   listCharacterSuggestions,
   listCollections,
   updateCollectionKeywords,
@@ -43,19 +42,7 @@ export function CollectionsPanel({ variant = "default" }: { variant?: "default" 
   const [batchRunning, setBatchRunning] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editKeywords, setEditKeywords] = useState("");
-  const [danbooruStatus, setDanbooruStatus] = useState<DanbooruIndexStatus | null>(null);
   const [diagnosisText, setDiagnosisText] = useState<string | null>(null);
-
-  const cacheReady = danbooruStatus?.cacheReady ?? false;
-
-  const refreshDanbooruStatus = useCallback(async () => {
-    try {
-      const status = await getDanbooruIndexStatus();
-      setDanbooruStatus(status);
-    } catch {
-      setDanbooruStatus(null);
-    }
-  }, []);
 
   const refreshCollections = useCallback(async () => {
     const updated = await listCollections();
@@ -75,8 +62,7 @@ export function CollectionsPanel({ variant = "default" }: { variant?: "default" 
   useEffect(() => {
     void refreshCollections().catch(() => setCollections([]));
     void refreshSuggestions();
-    void refreshDanbooruStatus();
-  }, [refreshCollections, refreshSuggestions, refreshDanbooruStatus, setCollections]);
+  }, [refreshCollections, refreshSuggestions, setCollections]);
 
   async function handleCreate() {
     const name = newName.trim();
@@ -112,10 +98,6 @@ export function CollectionsPanel({ variant = "default" }: { variant?: "default" 
   }
 
   async function handleBatchAssign() {
-    if (!cacheReady) {
-      toast(formatSkipReason("cache_not_ready"), "error");
-      return;
-    }
     setBatchRunning(true);
     try {
       const result = await batchAssignSmartCollections();
@@ -140,7 +122,7 @@ export function CollectionsPanel({ variant = "default" }: { variant?: "default" 
       const lines = [
         `ファイル: ${d.fileId ?? "—"}`,
         `プロンプト: ${d.hasPrompt ? d.promptPreview ?? "あり" : "なし"}`,
-        `辞書: ${d.cacheReady ? `${d.cacheCount.toLocaleString()} タグ` : "未構築"}`,
+        `スマートキーワード: ${d.cacheCount.toLocaleString()} 件`,
         `トークン: ${d.tokenizedTags.slice(0, 8).join(", ") || "—"}`,
         `マッチ: ${d.matchedCharacterTags.join(", ") || "なし"}`,
       ];
@@ -151,10 +133,6 @@ export function CollectionsPanel({ variant = "default" }: { variant?: "default" 
     } catch (e) {
       toast(String(e), "error");
     }
-  }
-
-  async function openSettings() {
-    await setViewMode("settings");
   }
 
   async function handleSaveKeywords(collection: Collection) {
@@ -335,17 +313,11 @@ export function CollectionsPanel({ variant = "default" }: { variant?: "default" 
   if (isIOSVariant) {
     return (
       <div className="ios-collections space-y-6 pb-8">
-        {!cacheReady && (
-          <IOSGroupedList title="初回セットアップ" footer="設定タブで danbooru2023.db をインポートし、辞書を更新してください。">
-            <IOSListRow label="設定を開く" showChevron onPress={() => void openSettings()} />
-          </IOSGroupedList>
-        )}
-
-        <IOSGroupedList title="スマート振り分け">
+        <IOSGroupedList title="スマート振り分け" footer="プロンプトの character: タグとスマートコレクションのキーワードで自動振り分けします。">
           <IOSListRow
             label={batchRunning ? "実行中…" : "スマート振り分けを実行"}
             onPress={() => void handleBatchAssign()}
-            disabled={batchRunning || !cacheReady}
+            disabled={batchRunning}
           />
           <IOSListRow label="診断テスト" onPress={() => void handleDiagnose()} />
         </IOSGroupedList>
@@ -417,41 +389,19 @@ export function CollectionsPanel({ variant = "default" }: { variant?: "default" 
         <div>
           <h1 className="text-title">コレクション</h1>
           <p className="mt-1 text-caption text-neutral-500">
-            Danbooru 辞書で判別したキャラクタータグごとにコレクションを自動作成し、プロンプトから振り分けます。手動アルバムも利用できます。
+            プロンプトの character: タグとスマートコレクションのキーワードで自動振り分けします。手動アルバムも利用できます。
           </p>
         </div>
-
-        {!cacheReady && (
-          <section className="space-y-2 rounded-lg border border-amber-900/60 bg-amber-950/30 p-4">
-            <h2 className="text-body font-medium text-amber-200">初回セットアップ</h2>
-            <p className="text-caption text-amber-100/80">
-              スマート振り分けには Danbooru キャラクター辞書が必要です。
-            </p>
-            <ol className="list-decimal space-y-1 pl-4 text-caption text-amber-100/80">
-              <li>設定で danbooru2023.db をインポート</li>
-              <li>「辞書を更新」を実行（数分かかります）</li>
-              <li>この画面で「スマート振り分けを実行」</li>
-            </ol>
-            <button type="button" onClick={() => void openSettings()} className="action-btn px-3 py-2">
-              設定を開く
-            </button>
-          </section>
-        )}
 
         <section className="space-y-2 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
           <h2 className="text-body font-medium">スマート振り分け</h2>
           <p className="text-caption text-neutral-500">
-            既存ライブラリ全体を Danbooru キャラタグで再スキャンし、コレクションへ振り分けます。
-            {danbooruStatus && (
-              <span className="mt-1 block">
-                辞書: {cacheReady ? `${danbooruStatus.cacheCount.toLocaleString()} タグ` : "未構築"}
-              </span>
-            )}
+            既存ライブラリ全体をプロンプトから再スキャンし、コレクションへ振り分けます。
           </p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={batchRunning || !cacheReady}
+              disabled={batchRunning}
               onClick={() => void handleBatchAssign()}
               className="action-btn px-3 py-2 disabled:opacity-50"
             >
@@ -513,7 +463,7 @@ export function CollectionsPanel({ variant = "default" }: { variant?: "default" 
           <section className="space-y-2">
             <h2 className="text-body font-medium">未作成キャラ</h2>
             <p className="text-caption text-neutral-500">
-              Danbooru で検出されたがコレクション未作成のキャラタグです。タップでコレクションを作成できます。
+              プロンプトで検出されたがコレクション未作成のキャラタグです。タップでコレクションを作成できます。
             </p>
             <div className="space-y-2">
               {suggestions.map((s) => (
