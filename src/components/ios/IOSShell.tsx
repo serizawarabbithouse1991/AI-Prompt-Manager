@@ -38,7 +38,10 @@ export function IOSShell() {
   }
 
   return (
-    <div className="app-shell ios-shell flex flex-col bg-[var(--ios-bg)] text-neutral-100">
+    <div
+      className="app-shell ios-shell flex flex-col bg-[var(--ios-bg)] text-neutral-100"
+      style={{ paddingTop: "var(--safe-top)" }}
+    >
       {showOnboarding && <IOSOnboarding onComplete={() => setShowOnboarding(false)} />}
       <ScanProgressBanner />
       <StorageBanner />
@@ -46,7 +49,7 @@ export function IOSShell() {
       <main
         className={[
           "ios-main min-h-0 flex-1 overflow-hidden",
-          selectionMode ? "pt-[calc(var(--safe-top)+7.5rem)]" : "",
+          selectionMode ? "pt-[7.5rem]" : "",
         ].join(" ")}
         style={{ paddingBottom: "calc(var(--ios-tab-bar-height) + var(--safe-bottom))" }}
       >

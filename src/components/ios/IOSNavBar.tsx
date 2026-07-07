@@ -18,10 +18,7 @@ export function IOSNavBar({
   children,
 }: IOSNavBarProps) {
   return (
-    <header
-      className="ios-nav-bar shrink-0 border-b border-[var(--ios-separator)] bg-[var(--ios-bg)]"
-      style={{ paddingTop: "var(--safe-top)" }}
-    >
+    <header className="ios-nav-bar shrink-0 border-b border-[var(--ios-separator)] bg-[var(--ios-bg)]">
       {!largeTitle && (
         <div className="flex min-h-11 items-center justify-between gap-2 px-4">
           <div className="flex min-w-0 flex-1 items-center gap-1">

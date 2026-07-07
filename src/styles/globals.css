@@ -158,9 +158,14 @@ body {
   --grid-gap: 2px;
 }
 
-[data-platform="ios"] body,
 [data-platform="ios"] .ios-shell {
   background: var(--ios-bg);
+  box-sizing: border-box;
+}
+
+[data-platform="ios"] .ios-nav-bar {
+  position: relative;
+  z-index: 10;
 }
 
 [data-platform="ios"] .ios-large-title {
